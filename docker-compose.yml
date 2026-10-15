@@ -1,0 +1,31 @@
+version: '3'
+services:
+  web:
+    image: flask_open
+    build: .
+    env_file:
+      - .env # copy .env.example to .env and edit it
+    ports:
+      - "8587:8587"
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+
+  socketio:
+    image: socket_open
+    build: ./socket
+    env_file:
+      - .env # reads CORS_ORIGINS
+    ports:
+      - "8500:8500"
+    restart: unless-stopped
+
+  code_runner:
+    image: flask_runner
+    build: ./runner
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    cpus: "1.0"
+    pids_limit: 128
+    restart: unless-stopped

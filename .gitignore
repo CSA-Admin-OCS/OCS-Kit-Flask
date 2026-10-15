@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.env.*
+!.env.example
+.env.swp
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# instance data, databases
+instance/volumes/
+instance/data.json
+instance/data.json.*.bak
+instance/data/jokes.json
+*user_management*.db
+
+# backups, uploads and other runtime data
+instance/backup/
+instance/backups/
+instance/uploads/*
+!instance/uploads/default/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+cookies.txt
+
+# OS / editor
+.DS_Store
