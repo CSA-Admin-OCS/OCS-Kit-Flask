@@ -1,0 +1,34 @@
+# ---------------------------------------------------------
+# Core web app
+# ---------------------------------------------------------
+Flask==3.1.3
+Werkzeug==3.1.9
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.54
+Flask-Migrate==4.1.0
+Flask-RESTful==0.3.10
+Flask-Cors==6.0.5
+PyJWT==2.15.1
+requests==2.34.2
+python-dotenv==1.2.4
+gunicorn==26.2.0
+
+# ---------------------------------------------------------
+# MySQL (production database; unused with the default SQLite)
+# cryptography is required by PyMySQL for MySQL 8 auth
+# ---------------------------------------------------------
+PyMySQL==1.2.3
+cryptography==50.0.2
+
+# ---------------------------------------------------------
+# Feature: Gemini document upload (api/gemini_api.py)
+# ---------------------------------------------------------
+pypdf==6.20.1
+python-docx==1.2.0
+
+# ---------------------------------------------------------
+# Feature: grade prediction (model/grade_model.py, api/grade_api.py; currently disabled in main.py)
+# ---------------------------------------------------------
+pandas==2.3.3
+scikit-learn==1.9.1

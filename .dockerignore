@@ -1,0 +1,40 @@
+# VCS and editor
+.git
+.gitignore
+.github
+.vscode
+.devcontainer
+.DS_Store
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+cookies.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# Runtime data (mounted as a volume, never baked into the image)
+instance/volumes/*
+!instance/volumes/README.md
+instance/backup/
+instance/backups/
+instance/data/
+instance/uploads/*
+!instance/uploads/default/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Not needed in the image
+deploy/
+docker-compose*.yml
+README.md
