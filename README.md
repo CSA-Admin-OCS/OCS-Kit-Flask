@@ -20,7 +20,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-On first boot, `entrypoint.sh` creates the SQLite database and the seeded accounts (`ADMIN_UID`, `TEACHER_UID`, `USER_UID`). The backend listens on <http://localhost:8587>. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
+On first boot, `entrypoint.sh` creates the SQLite database and one seeded account per role. The kit picks their default uids (see [Roles](#roles)), and `ADMIN_UID`, `TEACHER_UID` and `USER_UID` override them. The backend listens on <http://localhost:8587>. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
 
 The compose file also starts:
 - `socketio` on port 8500, used by the multiplayer features
@@ -32,16 +32,16 @@ To wipe and re-create the database, set `DB_INIT=true` for one start. This is de
 
 ## Choosing a kit
 
-A kit is a preset list of features. Pick one with `KIT` in `.env`:
+A kit is a preset list of features with its own names for the three roles. Pick one with `KIT` in `.env`:
 
-| `KIT` | What you get |
-|-------|--------------|
-| `vanilla` | Core only: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. |
-| `education` | A CS classroom: core, lessons, code runners, assignments, game engine, AI chatbot, AI grading, calendar, analytics, hall pass and social. |
-| `business` | Core plus every *general* feature: code runners, game engine, AI chatbot, social, calendar, analytics, finance sim, resume, Kasm, face recognition and examples. It leaves out the *education* features: lessons, assignments, AI grading and hall pass. |
-| *(empty)* | Every feature, as before kits existed. `/api/kit` then reports `"kit": "default"`. |
+| `KIT` | Features | Roles (admin / staff / member) and seeded uids |
+|-------|----------|-----------------------------------------------|
+| `vanilla` | Core only: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. | Admin / Editor / User: `admin`, `editor`, `user` |
+| `education` | Core plus lessons, code runners, assignments, game engine, AI chatbot, AI grading, calendar, analytics, hall pass, social and resume. | Admin / Teacher / Student: `admin`, `teacher`, `student` |
+| `business` | Core plus AI chatbot, social, calendar, analytics and resume. | Admin / Manager / Member: `admin`, `manager`, `member` |
+| *(empty)* | Every feature, as before kits existed. `/api/kit` reports `"kit": "default"`. | Admin / Teacher / User: `admin`, `teacher`, `user` |
 
-Each feature has a **category**: `core` is always on, `general` features are useful to any organization, and `education` features are for classrooms. Each feature also has **labels** that say what it needs and what data it handles, such as `needs-api-key`, `personal-data`, `student-safe` or `runs-code`. Check the labels before you turn a feature on. The full list is in [`kits/catalog.json`](kits/catalog.json).
+Each feature has a **category**: `core` is always on, `general` features are useful to any organization, and `education` features are for classrooms. Each feature also has **labels** that say what it needs and what data it handles, such as `needs-api-key`, `personal-data`, `student-safe` or `runs-code`. Check the labels before you turn a feature on. Each feature also has a **setup guide**: the settings it needs and which service reads them, the manual steps, and how to check that it works. It all lives in [`kits/catalog.json`](kits/catalog.json), and `python -m features --list` prints a summary.
 
 | Feature | Category | Flask endpoints (prefix) |
 |---------|----------|--------------------------|
@@ -49,49 +49,87 @@ Each feature has a **category**: `core` is always on, `general` features are use
 | `code-runner` | general | `/run/python`, `/run/javascript` |
 | `game-engine` | general | `/api/ainpc`, `/api/profile/game`, `/api/dynamic`, `/api/events` |
 | `ai-chatbot` | general | `/api/gemini`, `/api/groq` |
-| `ai-grading` | education | No endpoints of its own. It uses `/api/gemini`, including `/api/gemini/summarize-submissions`, so turning it on registers the Gemini proxy even when `ai-chatbot` is off. |
+| `ai-grading` | education | No endpoints of its own. It uses `/api/gemini`, including `/api/gemini/summarize-submissions`, so turning it on serves the Gemini proxy even when `ai-chatbot` is off. |
 | `social` | general | `/api/microblog`, `/api/post`, `/api/persona`, `/persona/` admin page |
 | `analytics` | general | `/api/analytics`, `/api/user/skill-passport`, `/api/user/skill-snapshot`, `/api/admin/skill-passport`, `/api/snapshot` |
-| `assignments` | education | `/api/study` (`/api/grade` exists but is not registered) |
+| `assignments` | education | `/api/study` (`/api/grade` exists but is never served) |
 | `kasm` | general | `/kasm_users` admin page; Kasm user sync in the User model |
 | `examples` | general | `/api/jokes`, `/api/student/*`, `/api/students`, `/api/congrats` |
 | `lessons`, `calendar`, `hallpass`, `finance-sim`, `resume`, `face-recognition` | | No Flask code. These are served by the Pages and Spring backends. |
 
-Check what is running with `curl http://localhost:8587/api/kit`. It needs no login and returns e.g. `{"kit": "education", "name": "OCS Education", "customized": false, "features": ["core", ...], "feature_details": [{"id": "core", "name": "Core platform", "category": "core", "labels": [...]}, ...]}`. Endpoints of disabled features return 404, and their admin links are hidden. `python -m features --list` prints the kits, categories and features, and shows which are enabled.
+Endpoints of disabled features return 404, and their admin-page links are hidden.
+
+### Roles
+
+Every kit has the same three roles: **admin** runs the site and is the only role that can change features, **staff** does day-to-day work (content, groups, grading, approvals), and **member** is a regular user and the role every sign-up gets. On accounts they are stored as `Admin`, `Teacher` and `User` (`flask.roles` in the catalog), whatever the kit, so changing `KIT` never rewrites accounts. Only the labels shown on pages and in `/api/kit` change, plus the default uids of the three seeded accounts. `ADMIN_*`, `TEACHER_*` (staff) and `USER_*` (member) in `.env` still override those uids, names and passwords.
+
+| Who | Can do |
+|-----|--------|
+| admin | Everything: turn features on and off, see each feature's setup status, manage users (delete, reset passwords), Kasm and persona admin pages |
+| staff | Open the user list and sections admin pages; staff-only API actions (classrooms, grading summaries in production). Cannot change features. |
+| member | Use the enabled features and edit their own profile. Can see which features are on (`/api/kit`) but cannot change them. |
 
 ### Customizing features
 
-`FEATURES` changes the kit's list:
+Features are decided in three layers, and each later layer wins:
+
+1. **`KIT`** picks the preset.
+2. **`FEATURES`** in `.env` changes the preset. Restart after changing it.
+   ```bash
+   KIT=business
+   FEATURES=+hallpass,-resume     # add or remove features relative to the kit
+   FEATURES=+*                    # the kit plus every other feature
+   FEATURES=ai-chatbot,social     # an explicit list replaces the kit (core is always added)
+   FEATURES=*,-kasm               # every feature except Kasm
+   ```
+3. **Admin overrides** apply at runtime with no restart, and only the admin role can set them. They are stored in the `feature_override` table, and every change is logged with who made it and when in `feature_audit`. `scripts/db_init.py` drops both tables.
+
+`core` is always on and cannot be removed. An unknown kit or feature id in `.env` stops the app at startup with an error that lists the valid ids.
+
+Every feature's database tables are always created, whatever the kit, so turning a feature on never needs a migration. When an admin turns a feature on and its tables are empty, its seed data is created. A feature that was turned off and on again keeps its data.
+
+### Kit API
+
+Pages, Spring and the installer share this contract.
+
+| Request | Who | Returns |
+|---------|-----|---------|
+| `GET /api/kit` | anyone | `{kit, kit_name, customized, features: [ids], feature_details: [{id, name, category, labels, enabled}], roles: {admin\|staff\|member: {label}}, signup_role}` |
+| `GET /api/kit/admin` | admin | The same, plus `base_features` (from `KIT`/`FEATURES`), `recent_changes` (audit log), and for each feature: `source` (`kit` \| `env` \| `admin`), `override`, `always_on`, `setup` (`summary`, `steps`, `verify`, and the settings Flask reads, each with `configured: true/false`) and `ready` (all required Flask settings configured). Setting values are never returned. |
+| `PUT /api/kit/admin/features` | admin | Body `{"features": {"social": true, "kasm": false}}`. Rejects unknown ids and disabling `core` with 400. Returns the admin payload. |
+| `DELETE /api/kit/admin/features/<id>` | admin | Clears that override, so `KIT`/`FEATURES` decide again. Returns the admin payload. |
+
+Anonymous callers get 401, and staff and members get 403. Both a login session and the JWT cookie from `/api/authenticate` work.
 
 ```bash
-KIT=education
-KIT=business
-FEATURES=+hallpass,-kasm       # add or remove features relative to the kit
-FEATURES=+*                    # the kit plus every other feature
-FEATURES=ai-chatbot,social     # an explicit list replaces the kit (core is always added)
-FEATURES=*,-kasm               # every feature except Kasm
+curl -c jar -X POST http://localhost:8587/api/authenticate -H 'Content-Type: application/json' \
+  -H 'X-Origin: client' -d '{"uid": "admin", "password": "123Qwerty!"}'
+curl -b jar http://localhost:8587/api/kit/admin
+curl -b jar -X PUT http://localhost:8587/api/kit/admin/features -H 'Content-Type: application/json' \
+  -d '{"features": {"social": false}}'
 ```
-
-`core` is always on and cannot be removed. An unknown kit or feature id stops the app at startup with an error that lists the valid ids. Restart the container after you change `.env`.
-
-Every feature's database tables are always created, whatever the kit. Only the seed data and the API endpoints depend on the kit. So you can turn a feature on later without a migration: restart and its endpoints appear (re-run `scripts/db_init.py` only if you also want its sample data).
 
 ### Adding a new feature
 
 All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
 
-1. Add the feature (id, name, category, labels, description) to the canonical `OCS-Kit/kits/catalog.json`, and add it to the kit presets that should include it. Copy those entries, and the `categories`, `labels` and `kits` maps, verbatim into this repo's `kits/catalog.json`.
-2. Write the code: a blueprint in `api/`, and any models in `model/`.
+1. Add the feature to the canonical `OCS-Kit/kits/catalog.json`: id, name, category, labels, description and `setup` guide. Add it to the kit presets that should include it. Copy everything except the `flask` blocks verbatim into this repo's `kits/catalog.json`.
+2. Write the code: a blueprint in `api/`, and any models in `model/`. For role checks, use `roles.py` or `user.is_admin()`/`is_staff()` instead of role names.
 3. In this repo's catalog, under the feature's `"flask"` block, list:
-   - `blueprints`: `"api.my_api:my_api"`. These are registered only when the feature is on. Each blueprint has exactly one owning feature.
-   - `uses_blueprints` (optional): blueprints owned by another feature that this feature also needs. They are registered when either feature is on.
+   - `blueprints`: `"api.my_api:my_api"`. Requests return 404 while the feature is off. Each blueprint has exactly one owning feature.
+   - `uses_blueprints` (optional): blueprints owned by another feature that this feature also needs. They are served when either feature is on.
    - `models`: `"model.my_model"`. These are always imported, so their tables always exist.
-   - `seed`: `"model.my_model:initMyThings"`. `db_init.py` runs these when the feature is on.
-   - `startup` (optional): functions that run at app start when the feature is on.
+   - `seed`: `"model.my_model:initMyThings"`. These run from `db_init.py`, and when an admin turns the feature on while its tables are empty.
+   - `startup` (optional): functions that run at app start and when the feature is turned on.
    - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar.
-4. Run `python -m features --check` and `python -m pytest tests`. The check fails on unknown ids, categories or labels, references that don't import, a blueprint claimed by two features, any blueprint in `api/` or `hacks/` that no feature lists (so new code can't skip gating), and drift from the canonical catalog.
+4. Run `python -m features --check` and `python -m pytest tests`. The check fails on:
+   - unknown ids, categories or labels, and kit roles that don't match the canonical ones
+   - references that don't import
+   - a blueprint claimed by two features
+   - any blueprint in `api/` or `hacks/` that no feature lists, so new code can't skip gating
+   - drift from the canonical catalog
 
-To add a feature to an existing feature's code, append to that feature's lists instead.
+To add code to an existing feature, append to that feature's lists instead.
 
 ## Going to production
 
@@ -139,7 +177,9 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 |------|---------|
 | `main.py` | App entry point: registers enabled features' blueprints and core admin routes |
 | `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
-| `tests/` | `python -m pytest tests` |
+| `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
+| `roles.py` | Role names and per-kit labels from the catalog |
+| `model/feature_override.py` | Admin feature overrides and their audit log |
 | `__init__.py` | Flask app, configuration from environment, database setup |
 | `api/` | REST API blueprints |
 | `model/` | SQLAlchemy models and seed data |
