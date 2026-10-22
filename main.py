@@ -1,5 +1,4 @@
 # imports from flask
-from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from flask import abort, redirect, render_template, request, send_from_directory, url_for, jsonify, current_app, g # import render_template from "public" flask libraries
 from flask_login import current_user, login_user, logout_user
@@ -10,88 +9,23 @@ from dotenv import load_dotenv
 
 # import "objects" from "this" project
 from __init__ import app, db, login_manager  # Key Flask objects 
-from model.persona import Persona, initPersonas, initPersonaUsers
-# API endpoints
-from api.user import user_api 
-from api.python_exec_api import python_exec_api
-from api.javascript_exec_api import javascript_exec_api
-from api.section import section_api
-from api.persona_api import persona_api
-from api.skill_snapshot_api import skill_passport_api
-from api.pfp import pfp_api
-from api.analytics import analytics_api
-from api.student import student_api
-from api.groq_api import groq_api
-from api.gemini_api import gemini_api
-from api.ainpc_api import ainpc_api
-from api.microblog_api import microblog_api
-from api.classroom_api import classroom_api
-from api.data_export_import_api import data_export_import_api
-from api.leaderboard import dynamic_api, events_api
-from hacks.joke import joke_api  # Import the joke API blueprint
-from api.post import post_api  # Import the social media post API
-from api.congrats_api import congrats_api  # Import the congrats API
-from api.profile_game import profile_game_api  # CS Pathway Game profile persistence
-from api.snapshot_proxy import snapshot_proxy
-#from api.announcement import announcement_api ##temporary revert
+import features  # kit feature registry; kits/catalog.json says what belongs to each feature
 
-# database Initialization functions
-from model.user import User, initUsers
-from model.user import Section;
-from model.github import GitHubUser
-from model.feedback import Feedback
-from api.analytics import get_date_range
-# from api.grade_api import grade_api
-from api.study import study_api
-from api.feedback_api import feedback_api
-from model.study import Study, initStudies
-from model.classroom import Classroom
-from model.skill_snapshot import SkillSnapshot
-from model.post import Post, init_posts
-from model.microblog import MicroBlog, Topic, initMicroblogs
-from model.leaderboard import ScoreCounterEvent, ElementaryLeaderboardEvent
-from hacks.jokes import initJokes 
-# from model.announcement import Announcement ##temporary revert
-
-# server only Views
+# Models: every feature's models are imported whatever the kit, so all tables and
+# foreign keys exist in every kit (the User model relates to personas, posts, etc.).
+features.import_all_models()
+from model.user import User, Section, initUsers  # initUsers: used by scripts/db_migrate-prod2sqlite.py
 
 import os
-import requests
 
+# API endpoints: only blueprints of enabled features are registered (see kits/catalog.json).
+# A disabled feature's URLs return 404. Validate the mapping with: python -m features --check
+_registered = features.register_blueprints(app)
+print(f"** Kit: {features.kit_name()} | features: {', '.join(features.enabled_features())}")
 
-
-# register URIs for api endpoints
-app.register_blueprint(python_exec_api)
-app.register_blueprint(javascript_exec_api)
-app.register_blueprint(user_api)
-app.register_blueprint(section_api)
-app.register_blueprint(persona_api)
-app.register_blueprint(skill_passport_api)
-app.register_blueprint(pfp_api) 
-app.register_blueprint(groq_api)
-app.register_blueprint(gemini_api)
-app.register_blueprint(ainpc_api)
-app.register_blueprint(microblog_api)
-
-app.register_blueprint(analytics_api)
-app.register_blueprint(student_api)
-# app.register_blueprint(grade_api)
-app.register_blueprint(study_api)
-app.register_blueprint(classroom_api)
-app.register_blueprint(feedback_api)
-app.register_blueprint(data_export_import_api)  # Register the data export/import API
-app.register_blueprint(dynamic_api)  # Register the dynamic leaderboard API
-app.register_blueprint(events_api)  # Register the elementary leaderboard API
-app.register_blueprint(joke_api)  # Register the joke API blueprint
-app.register_blueprint(post_api)  # Register the social media post API
-app.register_blueprint(congrats_api)  # Register the congrats message API
-app.register_blueprint(profile_game_api)  # CS Pathway Game profile persistence
-app.register_blueprint(snapshot_proxy)  # Register the snapshot proxy API
-# app.register_blueprint(announcement_api) ##temporary revert
-
-# Jokes file initialization
+# Startup hooks of enabled features (e.g. the jokes file for 'examples')
 with app.app_context():
-    initJokes()
+    features.run_hooks('startup')
 
 # Tell Flask-Login the view function name of your login route
 login_manager.login_view = "login"
@@ -139,6 +73,9 @@ def inject_kit_config():
         social_github=app.config.get('SOCIAL_GITHUB_URL'),
         social_twitter=app.config.get('SOCIAL_TWITTER_URL'),
         social_youtube=app.config.get('SOCIAL_YOUTUBE_URL'),
+        # Kit features: templates hide links to disabled features
+        kit_features=features.enabled_features(),
+        admin_links=features.admin_links(),
     )
 
 # Helper function to check if the URL is safe for redirects
@@ -191,12 +128,6 @@ def sections():
     sections = Section.query.all()
     return render_template("sections.html", sections=sections)
 
-@app.route('/persona/')
-@login_required
-def persona():
-    personas = Persona.query.all()
-    return render_template("persona.html", personas=personas)
-
 # Helper function to extract uploads for a user (ie PFP image)
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
@@ -225,97 +156,6 @@ def reset_password(user_id):
     if user.update({"password": app.config['DEFAULT_PASSWORD']}):
         return jsonify({'message': 'Password reset successfully'}), 200
     return jsonify({'error': 'Password reset failed'}), 500
-
-@app.route('/kasm_users')
-def kasm_users():
-    # Fetch configuration details from environment or app config
-    SERVER = current_app.config.get('KASM_SERVER')
-    API_KEY = current_app.config.get('KASM_API_KEY')
-    API_KEY_SECRET = current_app.config.get('KASM_API_KEY_SECRET')
-
-    # Validate required configurations
-    if not SERVER or not API_KEY or not API_KEY_SECRET:
-        return render_template('error.html', message='KASM keys are missing'), 400
-
-    try:
-        # Prepare API request details
-        url = f"{SERVER}/api/public/get_users"
-        data = {
-            "api_key": API_KEY,
-            "api_key_secret": API_KEY_SECRET
-        }
-
-        # Perform the POST request
-        response = requests.post(url, json=data, timeout=10)  # Added timeout for reliability
-
-        # Validate the API response
-        if response.status_code != 200:
-            return render_template(
-                'error.html', 
-                message='Failed to get users', 
-                code=response.status_code
-            ), response.status_code
-
-        # Parse the users list from the response
-        users = response.json().get('users', [])
-
-        # Process `last_session` and handle potential parsing issues
-        for user in users:
-            last_session = user.get('last_session')
-            try:
-                user['last_session'] = datetime.fromisoformat(last_session) if last_session else None
-            except ValueError:
-                user['last_session'] = None  # Fallback for invalid date formats
-
-        # Sort users by `last_session`, treating `None` as the oldest date
-        sorted_users = sorted(
-            users, 
-            key=lambda x: x['last_session'] or datetime.min, 
-            reverse=True
-        )
-
-        # Render the sorted users in the template
-        return render_template('kasm_users.html', users=sorted_users)
-
-    except requests.RequestException as e:
-        # Handle connection errors or other request exceptions
-        return render_template(
-            'error.html', 
-            message=f"Error connecting to KASM API: {str(e)}"
-        ), 500
-        
-        
-@app.route('/delete_user/<user_id>', methods=['DELETE'])
-def delete_user_kasm(user_id):
-    if current_user.role != 'Admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    SERVER = current_app.config.get('KASM_SERVER')
-    API_KEY = current_app.config.get('KASM_API_KEY')
-    API_KEY_SECRET = current_app.config.get('KASM_API_KEY_SECRET')
-
-    if not SERVER or not API_KEY or not API_KEY_SECRET:
-        return {'message': 'KASM keys are missing'}, 400
-
-    try:
-        # Kasm API to delete a user
-        url = f"{SERVER}/api/public/delete_user"
-        data = {
-            "api_key": API_KEY,
-            "api_key_secret": API_KEY_SECRET,
-            "target_user": {"user_id": user_id},
-            "force": False
-        }
-        response = requests.post(url, json=data)
-
-        if response.status_code == 200:
-            return {'message': 'User deleted successfully'}, 200
-        else:
-            return {'message': 'Failed to delete user'}, response.status_code
-
-    except requests.RequestException as e:
-        return {'message': 'Error connecting to KASM API', 'error': str(e)}, 500
-
 
 @app.route('/update_user/<string:uid>', methods=['PUT'])
 def update_user(uid):
@@ -350,10 +190,8 @@ custom_cli = AppGroup('custom', help='Custom commands')
 # Define a command to run the data generation functions
 @custom_cli.command('generate_data')
 def generate_data():
-    initUsers()
-    initMicroblogs()
-    initPersonas()
-    initPersonaUsers()
+    # Seed functions of enabled features, in catalog order (core's initUsers first)
+    features.run_hooks('seed')
 
 # Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)

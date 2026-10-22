@@ -20,10 +20,10 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                           Data 
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDarkDropdownMenuLink">
-                            <li><a class="dropdown-item" href={{ url_for('u2table') }}>User Management</a></li>
-                            <li><a class="dropdown-item" href={{ url_for('kasm_users') }}>Kasm User Report</a></li>
-                            <li><a class="dropdown-item" href={{ url_for('sections') }}>Sections</a></li>
-                            <li><a class="dropdown-item" href={{ url_for('persona') }}>Personas</a></li>
+                            <!-- Links come from enabled kit features ('admin_links' in kits/catalog.json) -->
+                            {% for link in admin_links %}
+                            <li><a class="dropdown-item" href="{{ url_for(link.endpoint) }}">{{ link.label }}</a></li>
+                            {% endfor %}
                         </ul>
                     </div>
                 </div>

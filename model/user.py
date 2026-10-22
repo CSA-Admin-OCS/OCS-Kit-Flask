@@ -9,7 +9,19 @@ import json
 
 from __init__ import app, db
 from model.github import GitHubUser
-from model.kasm import KasmUser
+import features
+from model.kasm import KasmUser as _KasmUser
+
+
+class _NoKasm:
+    """Stand-in used when the 'kasm' feature is disabled: every Kasm call is a no-op."""
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+
+
+def KasmUser():
+    """Kasm API client, or a no-op when the kit does not enable the 'kasm' feature."""
+    return _KasmUser() if features.is_enabled('kasm') else _NoKasm()
 
 """ Helper Functions """
 

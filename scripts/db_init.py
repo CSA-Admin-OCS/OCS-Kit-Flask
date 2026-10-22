@@ -145,11 +145,16 @@ def main():
                 db.session.execute(db.text('SET FOREIGN_KEY_CHECKS=1;'))
                 db.session.commit()
             
-            # Create all tables
+            # Create all tables -- for every feature, not only the enabled ones. Tables are
+            # cheap and empty, core tables have foreign keys/relationships to feature tables
+            # (e.g. users <-> user_personas), and turning a feature on later then needs no
+            # migration. Only the seed data below depends on the kit.
             db.create_all()
             print("All tables created.")
             
-            # Add default test data 
+            # Seed data for enabled features only (kits/catalog.json 'seed' entries)
+            import features
+            print(f"Seeding kit '{features.kit_name()}': {', '.join(features.enabled_features())}")
             generate_data() # test data
             
     except Exception as e:
