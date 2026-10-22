@@ -222,11 +222,27 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
         extra = set(f.get('flask', {})) - set(FLASK_KEYS)
         if extra:
             problems.append(f"feature '{fid}': unknown flask keys {sorted(extra)}")
-    for kid, kit in catalog['kits'].items():
-        try:
-            _expand(kit['features'], all_ids, f"kit '{kid}'")
-        except FeatureConfigError as e:
-            problems.append(str(e))
+    role_ids = list(catalog.get('roles', {}))
+    flask_roles = catalog.get('flask', {}).get('roles', {})
+    if sorted(flask_roles) != sorted(role_ids) or not role_ids:
+        problems.append(f"top-level flask.roles must map exactly the canonical roles {role_ids}")
+    if len(set(flask_roles.values())) != len(flask_roles):
+        problems.append("flask.roles: two canonical roles map to the same Flask role")
+    default_kit = catalog.get('flask', {}).get('default_kit', {})
+    for kid, kit in list(catalog['kits'].items()) + [('(KIT unset) flask.default_kit', default_kit)]:
+        if kid in catalog['kits']:
+            try:
+                _expand(kit['features'], all_ids, f"kit '{kid}'")
+            except FeatureConfigError as e:
+                problems.append(str(e))
+        if sorted(kit.get('roles', {})) != sorted(role_ids):
+            problems.append(f"kit '{kid}': roles must cover exactly {role_ids}")
+        if kit.get('signup_role') not in role_ids:
+            problems.append(f"kit '{kid}': signup_role {kit.get('signup_role')!r} is not a canonical role")
+    for fid, f in catalog['features'].items():
+        for st in f.get('setup', {}).get('settings', []):
+            if st.get('service') not in ('flask', 'spring', 'pages') or not st.get('key'):
+                problems.append(f"feature '{fid}': setup setting {st.get('key')!r} needs a key and service flask|spring|pages")
 
     # 2. ids, names, descriptions and kits must match the canonical catalog verbatim
     if os.path.exists(canonical_path):
@@ -240,7 +256,9 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
             for key in set(cf) | (set(mine) - {'flask'}):
                 if mine.get(key) != cf.get(key):
                     problems.append(f"feature '{fid}' field '{key}' differs from canonical catalog")
-        for key in ('categories', 'labels', 'kits'):
+        for key in canon:
+            if key in ('version', 'description', 'features'):
+                continue
             if canon.get(key) != catalog.get(key):
                 problems.append(f"top-level '{key}' differs from canonical {canonical_path}")
     elif require_canonical:

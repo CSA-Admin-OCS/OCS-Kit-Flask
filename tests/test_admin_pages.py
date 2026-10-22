@@ -8,7 +8,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-os.environ['KIT'] = 'business'  # every feature on, so every admin page is registered
+os.environ.pop('KIT', None)  # KIT unset: every feature on, so every admin page is served
 os.environ.pop('FEATURES', None)
 
 from flask_login import UserMixin  # noqa: E402
