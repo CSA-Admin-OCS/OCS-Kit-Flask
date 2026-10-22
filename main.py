@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from __init__ import app, db, login_manager  # Key Flask objects 
 import features  # kit feature registry; kits/catalog.json says what belongs to each feature
 import roles  # role names and per-kit labels from kits/catalog.json
+from api.authorize import admin_page_required, staff_page_required
 
 # Models: every feature's models are imported whatever the kit, so all tables and
 # foreign keys exist in every kit (the User model relates to personas, posts, etc.).
@@ -119,14 +120,16 @@ def index():
 
 
 
+# Admin pages. Staff (e.g. Teacher / Manager / Editor) may view users and sections; changing
+# or deleting accounts is admin-only. Anonymous visitors are sent to /login, others get 403.
 @app.route('/users/table2')
-@login_required
+@staff_page_required
 def u2table():
     users = User.query.all()
     return render_template("u2table.html", user_data=users)
 
 @app.route('/sections/')
-@login_required
+@staff_page_required
 def sections():
     sections = Section.query.all()
     return render_template("sections.html", sections=sections)
@@ -137,7 +140,7 @@ def uploaded_file(filename):
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
  
 @app.route('/users/delete/<int:user_id>', methods=['DELETE'])
-@login_required
+@admin_page_required
 def delete_user(user_id):
     user = User.query.get(user_id)
     if user:
@@ -146,11 +149,8 @@ def delete_user(user_id):
     return jsonify({'error': 'User not found'}), 404
 
 @app.route('/users/reset_password/<int:user_id>', methods=['POST'])
-@login_required
+@admin_page_required
 def reset_password(user_id):
-    if not current_user.is_admin():
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
@@ -161,11 +161,8 @@ def reset_password(user_id):
     return jsonify({'error': 'Password reset failed'}), 500
 
 @app.route('/update_user/<string:uid>', methods=['PUT'])
+@admin_page_required
 def update_user(uid):
-    # Authorization check
-    if not current_user.is_admin():
-        return jsonify({'error': 'Unauthorized'}), 403
-
     # Get the JSON data from the request
     data = request.get_json()
     print(f"Request Data: {data}")  # Log the incoming data
