@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "description": "OCS-Kit-Flask feature catalog: the ONLY place Flask code is assigned to features and kits. Feature ids, names, descriptions and kit presets are copied verbatim from the canonical OCS-Kit/kits/catalog.json (checked by `python -m features --check`). Per feature, 'flask' lists: blueprints ('module:attribute', registered only when the feature is enabled), inactive_blueprints (owned by the feature but never registered), models (always imported so every table and foreign key exists in every kit), seed (functions run by scripts/db_init.py when the feature is enabled), startup (functions run at app start when enabled) and admin_links (navbar entries in the server-rendered admin pages).",
+  "features": {
+    "core": {
+      "name": "Core platform",
+      "always_on": true,
+      "description": "Login, accounts, roles, sections/groups, profile, admin pages, blog + notebook pipeline, search.",
+      "flask": {
+        "blueprints": [
+          "api.kit_api:kit_api",
+          "api.user:user_api",
+          "api.section:section_api",
+          "api.pfp:pfp_api",
+          "api.classroom_api:classroom_api",
+          "api.data_export_import_api:data_export_import_api",
+          "api.feedback_api:feedback_api"
+        ],
+        "inactive_blueprints": [],
+        "models": [
+          "model.user",
+          "model.classroom",
+          "model.pfp",
+          "model.feedback",
+          "model.github"
+        ],
+        "seed": [
+          "model.user:initUsers"
+        ],
+        "startup": [],
+        "admin_links": [
+          {
+            "label": "User Management",
+            "endpoint": "u2table"
+          },
+          {
+            "label": "Sections",
+            "endpoint": "sections"
+          }
+        ]
+      }
+    },
+    "lessons": {
+      "name": "Lessons",
+      "description": "Course lessons and notebooks, lesson layouts, lesson progress tracking.",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "code-runner": {
+      "name": "Code runners",
+      "description": "Run student Python, JavaScript and Java in sandboxed runner containers; code-runner widgets in lessons.",
+      "flask": {
+        "blueprints": [
+          "api.python_exec_api:python_exec_api",
+          "api.javascript_exec_api:javascript_exec_api"
+        ],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "assignments": {
+      "name": "Assignments and grading",
+      "description": "Assignments, submissions, grades, quizzes, quests, certificates, evaluations, team teaching, sprint dates, student/teacher toolkit, grade predictors.",
+      "flask": {
+        "blueprints": [
+          "api.study:study_api"
+        ],
+        "inactive_blueprints": [
+          "api.grade_api:grade_api"
+        ],
+        "models": [
+          "model.study"
+        ],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "game-engine": {
+      "name": "Game engine",
+      "description": "JavaScript game engine, game projects (gamify, adventure/RPG), multiplayer, leaderboards, AI NPCs.",
+      "flask": {
+        "blueprints": [
+          "api.ainpc_api:ainpc_api",
+          "api.profile_game:profile_game_api",
+          "api.leaderboard:dynamic_api",
+          "api.leaderboard:events_api"
+        ],
+        "inactive_blueprints": [],
+        "models": [
+          "model.leaderboard"
+        ],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "ai": {
+      "name": "AI assistants",
+      "description": "Gemini/Groq chat proxies, AI tutor chatbots, AI FRQ grading and feedback.",
+      "flask": {
+        "blueprints": [
+          "api.gemini_api:gemini_api",
+          "api.groq_api:groq_api"
+        ],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "social": {
+      "name": "Social",
+      "description": "Microblog, posts, comments, notes, announcements, chat and direct messages, personas.",
+      "flask": {
+        "blueprints": [
+          "api.microblog_api:microblog_api",
+          "api.post:post_api",
+          "api.persona_api:persona_api",
+          "api.persona_admin:persona_admin"
+        ],
+        "inactive_blueprints": [],
+        "models": [
+          "model.microblog",
+          "model.post",
+          "model.persona"
+        ],
+        "seed": [
+          "model.microblog:initMicroblogs",
+          "model.persona:initPersonas",
+          "model.persona:initPersonaUsers"
+        ],
+        "startup": [],
+        "admin_links": [
+          {
+            "label": "Personas",
+            "endpoint": "persona_admin.persona"
+          }
+        ]
+      }
+    },
+    "calendar": {
+      "name": "Calendar",
+      "description": "Class calendar, events, issue/calendar sync.",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "analytics": {
+      "name": "Analytics",
+      "description": "Usage analytics, GitHub contribution stats, skill snapshots, stats dashboards.",
+      "flask": {
+        "blueprints": [
+          "api.analytics:analytics_api",
+          "api.skill_snapshot_api:skill_passport_api",
+          "api.snapshot_proxy:snapshot_proxy"
+        ],
+        "inactive_blueprints": [],
+        "models": [
+          "model.skill_snapshot"
+        ],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "hallpass": {
+      "name": "Hall pass",
+      "description": "Bathroom/hall pass queues, student help queue, approval requests.",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "finance-sim": {
+      "name": "Finance simulation",
+      "description": "Bank, stocks, crypto and mining simulation, casino-style probability games.",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "resume": {
+      "name": "Resume builder",
+      "description": "Student resume pages and API.",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "kasm": {
+      "name": "Kasm virtual desktops",
+      "description": "Kasm Workspaces integration (needs a Kasm server).",
+      "flask": {
+        "blueprints": [
+          "api.kasm_admin:kasm_admin"
+        ],
+        "inactive_blueprints": [],
+        "models": [
+          "model.kasm"
+        ],
+        "seed": [],
+        "startup": [],
+        "admin_links": [
+          {
+            "label": "Kasm User Report",
+            "endpoint": "kasm_admin.kasm_users"
+          }
+        ]
+      }
+    },
+    "face-recognition": {
+      "name": "Face recognition",
+      "description": "Face registration/login (biometric data: check your school's privacy policy before enabling).",
+      "flask": {
+        "blueprints": [],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [],
+        "admin_links": []
+      }
+    },
+    "examples": {
+      "name": "Teaching examples",
+      "description": "Classroom demo code: hacks, jokes, small sample APIs and pages, media-literacy lesson.",
+      "flask": {
+        "blueprints": [
+          "hacks.joke:joke_api",
+          "api.student:student_api",
+          "api.congrats_api:congrats_api"
+        ],
+        "inactive_blueprints": [],
+        "models": [],
+        "seed": [],
+        "startup": [
+          "hacks.jokes:initJokes"
+        ],
+        "admin_links": []
+      }
+    }
+  },
+  "kits": {
+    "vanilla": {
+      "name": "OCS Vanilla",
+      "description": "Baseline platform, suitable for giving to students: accounts, profile, blog and notebooks.",
+      "features": [
+        "core"
+      ]
+    },
+    "education": {
+      "name": "OCS Education",
+      "description": "A full CS classroom: lessons, code runners, assignments and grading, game engine, AI tutor, calendar, analytics, hall pass.",
+      "features": [
+        "core",
+        "lessons",
+        "code-runner",
+        "assignments",
+        "game-engine",
+        "ai",
+        "calendar",
+        "analytics",
+        "hallpass",
+        "social"
+      ]
+    },
+    "business": {
+      "name": "OCS Business",
+      "description": "Everything enabled; customize by removing features you don't want.",
+      "features": [
+        "*"
+      ]
+    }
+  }
+}
