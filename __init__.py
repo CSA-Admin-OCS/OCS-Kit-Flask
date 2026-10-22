@@ -149,6 +149,11 @@ else:
    dbString = 'sqlite:///volumes/'
    dbURI = dbString + dbName + '.db'
    backupURI = dbString + dbName + '_bak.db'
+# Advanced/testing: point at any database URL instead (e.g. sqlite:////tmp/test.db).
+# scripts/db_init.py cannot back this up; it needs ALLOW_NO_BACKUP=true.
+if os.environ.get('SQLALCHEMY_DATABASE_URI'):
+   dbURI = os.environ['SQLALCHEMY_DATABASE_URI']
+   backupURI = None
 # Set database configuration in Flask app
 app.config['DB_ENDPOINT'] = DB_ENDPOINT
 app.config['DB_USERNAME'] = DB_USERNAME

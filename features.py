@@ -123,35 +123,137 @@ def kit_name():
     return _state()[0]
 
 
-def enabled_features():
+# --- admin overrides (stored in the database, see model/feature_override.py) ----------------
+# Effective features = KIT preset -> FEATURES env -> admin overrides. This module stays free of
+# Flask/DB imports; main.py installs a provider that reads the feature_override table.
+
+_override_provider = None
+
+
+def set_override_provider(fn):
+    """fn() -> {feature_id: bool}. Called on every check, so changes apply without a restart."""
+    global _override_provider
+    _override_provider = fn
+
+
+def overrides():
+    if _override_provider is None:
+        return {}
+    try:
+        found = _override_provider() or {}
+    except Exception as e:  # a missing table or DB outage must not take the site down
+        print(f"features: cannot read admin overrides ({e}); using KIT/FEATURES only")
+        return {}
+    ids = feature_ids()
+    return {fid: bool(on) for fid, on in found.items() if fid in ids}  # ids removed from the catalog are ignored
+
+
+def apply_overrides(base_enabled, override_map):
+    """Pure: base list + {id: bool} -> ordered effective list; core always on."""
+    enabled = set(base_enabled)
+    for fid, on in override_map.items():
+        (enabled.add if on else enabled.discard)(fid)
+    enabled.add(CORE)
+    return [f for f in feature_ids() if f in enabled]
+
+
+def base_features():
+    """Enabled by KIT + FEATURES only (what the server operator configured)."""
     return list(_state()[2])
+
+
+def enabled_features():
+    """Effective enabled features, admin overrides included."""
+    return apply_overrides(_state()[2], overrides())
 
 
 def is_enabled(fid):
     if fid not in feature_ids():
         raise FeatureConfigError(f"Unknown feature id '{fid}'")
-    return fid in _state()[2]
+    return fid in enabled_features()
+
+
+def source(fid, override_map=None):
+    """Who decided this feature's state: 'admin' (override), 'env' (FEATURES) or 'kit'."""
+    override_map = overrides() if override_map is None else override_map
+    if fid in override_map:
+        return 'admin'
+    name, _, base = _state()
+    if (os.environ.get('FEATURES') or '').strip():
+        if name == 'custom':
+            return 'env'
+        kit = os.environ.get('KIT', '').strip().lower()
+        preset = set(_expand(load_catalog()['kits'][kit]['features'], feature_ids(), 'kit')) | {CORE} \
+            if kit else set(feature_ids())
+        if (fid in preset) != (fid in base):
+            return 'env'
+    return 'kit'
 
 
 def kit_info():
-    """Public summary served by GET /api/kit."""
-    name, customized, enabled = _state()
+    """Public summary served by GET /api/kit (shared contract with the Spring backend)."""
+    import roles  # roles imports this module
+    name, customized, _ = _state()
+    override_map = overrides()
+    enabled = apply_overrides(_state()[2], override_map)
     catalog = load_catalog()
     kit = catalog['kits'].get(name, {})
-    default_names = {DEFAULT_KIT: 'All features (KIT not set)', 'custom': 'Custom'}
+    default_names = {DEFAULT_KIT: catalog['flask']['default_kit']['name'], 'custom': 'Custom'}
+    kit_label = kit.get('name', default_names.get(name, name))
     return {
         'kit': name,
-        'name': kit.get('name', default_names.get(name, name)),
-        'customized': customized,
-        'features': enabled,  # list of ids (stable contract)
+        'kit_name': kit_label,
+        'name': kit_label,  # same as kit_name; kept for older clients
+        'customized': customized or bool(override_map),
+        'features': enabled,  # ids of enabled features
         'feature_details': [
             {'id': fid,
-             'name': catalog['features'][fid]['name'],
-             'category': catalog['features'][fid].get('category'),
-             'labels': catalog['features'][fid].get('labels', [])}
-            for fid in enabled
+             'name': f['name'],
+             'category': f.get('category'),
+             'labels': f.get('labels', []),
+             'enabled': fid in enabled}
+            for fid, f in catalog['features'].items()
         ],
+        'roles': roles.public_roles(),
+        'signup_role': roles.kit_config()['signup_role'],
     }
+
+
+def setting_configured(key, config=None):
+    """True when a backend setting has a value (env or app config). Never returns the value."""
+    value = os.environ.get(key)
+    if not value and config is not None:
+        value = config.get(key)
+    return bool(value)
+
+
+def admin_info(config=None):
+    """kit_info() plus, per feature, where its state comes from and its Flask setup status.
+    Setting values are never included, only whether each one is configured."""
+    info = kit_info()
+    override_map = overrides()
+    catalog = load_catalog()
+    for d in info['feature_details']:
+        f = catalog['features'][d['id']]
+        setup = f.get('setup', {})
+        settings = [
+            {'key': st['key'], 'service': st['service'], 'required': bool(st.get('required')),
+             'secret': bool(st.get('secret')), 'help': st.get('help'), 'get_it': st.get('get_it'),
+             'example': None if st.get('secret') else st.get('example'),
+             'configured': setting_configured(st['key'], config)}
+            for st in setup.get('settings', []) if st.get('service') == 'flask'
+        ]
+        d.update({
+            'always_on': bool(f.get('always_on')),
+            'source': source(d['id'], override_map),
+            'override': override_map.get(d['id']),
+            'setup': {'summary': setup.get('summary'), 'settings': settings,
+                      'steps': setup.get('steps', []), 'verify': setup.get('verify')},
+            'ready': all(st['configured'] for st in settings if st['required']),
+        })
+    info['base_features'] = base_features()
+    info['feature_management'] = catalog.get('feature_management', {})
+    return info
 
 
 # --- loading code named in the catalog ---------------------------------------
@@ -170,25 +272,42 @@ def import_all_models():
             load_ref(ref)
 
 
+_blueprint_features = {}
+
+
 def register_blueprints(app):
-    """Register blueprints of enabled features only ('blueprints' + 'uses_blueprints');
-    returns [(feature, blueprint name)]."""
-    done, seen = [], set()
-    for fid in enabled_features():
+    """Register every feature's blueprints ('blueprints' + 'uses_blueprints'; not
+    'inactive_blueprints') and gate each request: a blueprint answers 404 unless one of the
+    features that list it is enabled right now. Returns [(feature, blueprint name)]."""
+    from flask import abort, request
+    done, seen = [], {}
+    for fid in feature_ids():
         spec = flask_spec(fid)
         for ref in spec['blueprints'] + spec['uses_blueprints']:
-            if ref in seen:
-                continue
-            seen.add(ref)
-            bp = load_ref(ref)
-            app.register_blueprint(bp)
-            done.append((fid, bp.name))
+            if ref not in seen:
+                bp = load_ref(ref)
+                app.register_blueprint(bp)
+                seen[ref] = bp.name
+                done.append((fid, bp.name))
+            _blueprint_features.setdefault(seen[ref], set()).add(fid)
+
+    @app.before_request
+    def _gate_disabled_features():
+        owners = _blueprint_features.get(request.blueprint)
+        if owners and CORE not in owners and not owners.intersection(enabled_features()):
+            abort(404)
     return done
 
 
-def run_hooks(kind):
-    """Run 'seed' or 'startup' functions of enabled features, in catalog order."""
-    for fid in enabled_features():
+def features_of_blueprint(name):
+    return set(_blueprint_features.get(name, ()))
+
+
+def run_hooks(kind, only=None):
+    """Run 'seed' or 'startup' functions of enabled features (or of the ids in only),
+    in catalog order."""
+    targets = enabled_features() if only is None else [f for f in feature_ids() if f in only]
+    for fid in targets:
         for ref in flask_spec(fid)[kind]:
             load_ref(ref)()
 
@@ -347,6 +466,7 @@ def print_list():
     if name:
         print(f"\nKIT={os.environ.get('KIT') or '(unset)'} FEATURES={os.environ.get('FEATURES') or '(unset)'}"
               f" -> kit '{name}'{' (customized)' if customized else ''}, {len(enabled)} features enabled")
+        print("Admins can change this at runtime (PUT /api/kit/admin/features); see GET /api/kit/admin.")
 
 
 def main(argv=None):

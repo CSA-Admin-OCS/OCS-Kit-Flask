@@ -20,13 +20,20 @@ from model.user import User, Section, initUsers  # initUsers: used by scripts/db
 
 import os
 
-# API endpoints: only blueprints of enabled features are registered (see kits/catalog.json).
-# A disabled feature's URLs return 404. Validate the mapping with: python -m features --check
-_registered = features.register_blueprints(app)
-print(f"** Kit: {features.kit_name()} | features: {', '.join(features.enabled_features())}")
+# Effective features = KIT preset -> FEATURES env -> admin overrides in the database
+# (PUT /api/kit/admin/features). Overrides are read per request, so no restart is needed.
+from model import feature_override
+features.set_override_provider(feature_override.read_overrides)
 
-# Startup hooks of enabled features (e.g. the jokes file for 'examples')
+# API endpoints: every feature's blueprints are registered, and a request to a blueprint whose
+# feature(s) are disabled right now gets 404 (see kits/catalog.json, features.py).
+# Validate the mapping with: python -m features --check
+_registered = features.register_blueprints(app)
+
 with app.app_context():
+    feature_override.ensure_tables()  # databases created before admin overrides existed
+    print(f"** Kit: {features.kit_name()} | features: {', '.join(features.enabled_features())}")
+    # Startup hooks of enabled features (e.g. the jokes file for 'examples')
     features.run_hooks('startup')
 
 # Tell Flask-Login the view function name of your login route

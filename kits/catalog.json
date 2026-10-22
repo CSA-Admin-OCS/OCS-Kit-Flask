@@ -140,7 +140,8 @@
           "model.classroom",
           "model.pfp",
           "model.feedback",
-          "model.github"
+          "model.github",
+          "model.feature_override"
         ],
         "seed": [
           "model.user:initUsers"
