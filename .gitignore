@@ -35,3 +35,4 @@ cookies.txt
 
 # OS / editor
 .DS_Store
+.pytest_cache/
