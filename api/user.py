@@ -9,7 +9,7 @@ from flask_restful import Api, Resource # used for REST API building
 from datetime import datetime, timedelta
 from __init__ import app, db
 from api.authorize import token_required
-from model.user import User
+from model.user import User, meets_password_rule, WeakPasswordError
 from model.github import GitHubUser
 import os
 
@@ -193,8 +193,7 @@ class UserAPI:
             #1: Setup minimal User object using __init__ method
             password = body.get('password')
             if password is not None:
-                if len(password) < 8 and not password.startswith("pbkdf2:sha256:"):
-                    return {'message': 'Password must be at least 8 characters'}, 400
+                # The model rejects a password that breaks the rule (WeakPasswordError -> 400).
                 user_obj = User(name=name, uid=uid, password=password)
             else:
                 user_obj = User(name=name, uid=uid)
@@ -776,10 +775,10 @@ class UserAPI:
             if uid is None or len(uid) < 2:
                 return {'message': 'Username is missing, or is less than 2 characters'}, 400
 
-            # Validate password (relaxed requirement for guests)
+            # Guests follow the same password rule as everyone else (checked by the model)
             password = body.get('password')
-            if password is None or len(password) < 2:
-                return {'message': 'Password is missing, or is less than 2 characters'}, 400
+            if not password:
+                return {'message': 'Password is missing'}, 400
 
             # Auto-generate required fields for guest accounts
             name = f"Guest_{uid}"
@@ -840,8 +839,9 @@ class UserAPI:
 
             if not uid or not reset_token or not password:
                 return {'message': 'uid, resetToken, and newPassword are required'}, 400
-            if len(password) < 8:
-                return {'message': 'Password must be at least 8 characters'}, 400
+            # Check the rule before the single-use token gets spent on a weak password
+            if not meets_password_rule(password):
+                raise WeakPasswordError()
             if not _consume_reset_token(uid, reset_token):
                 return {'message': 'Invalid, expired, or already-used reset token'}, 403
 

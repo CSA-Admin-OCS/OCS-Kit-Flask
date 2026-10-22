@@ -121,7 +121,7 @@ python scripts/db_init.py     # create tables and seed accounts
 python main.py                # http://localhost:8587
 ```
 
-In development, any unset seeded password defaults to `password`. If `SECRET_KEY` is unset, a random key is generated at startup, so logins reset on every restart.
+In development, any unset seeded password defaults to `123Qwerty!`. Every password, including the ones you set in `.env`, must follow the password rule: 8 or more characters, with an uppercase letter, a lowercase letter, a number and one of `` ` ~ ! @ # $ % ^ & * ( ) ``. Spring and Pages use the same rule. A password that breaks it is refused with HTTP 400. If `SECRET_KEY` is unset, a random key is generated at startup, so logins reset on every restart.
 
 For the local frontend, the default `CORS_ORIGINS` allows `http://localhost:4500`, `http://127.0.0.1:4500`, `http://localhost:4000` and `http://127.0.0.1:4000`.
 
@@ -130,7 +130,7 @@ Test the login API:
 ```bash
 curl -i -X POST http://localhost:8587/api/authenticate \
   -H 'Content-Type: application/json' -H 'X-Origin: client' \
-  -d '{"uid": "admin", "password": "password"}'
+  -d '{"uid": "admin", "password": "123Qwerty!"}'
 ```
 
 ## Project layout

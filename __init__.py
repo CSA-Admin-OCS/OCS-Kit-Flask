@@ -68,10 +68,12 @@ cors = CORS(
 
 
 # Seeded account defaults
-# In development any unset password falls back to 'password'. In production (IS_PRODUCTION=true)
+# In development any unset password falls back to '123Qwerty!'. Every password must follow the
+# password rule in model/user.py (8+ characters, upper and lower case, a number and one of
+# ` ~ ! @ # $ % ^ & * ( ) ). In production (IS_PRODUCTION=true)
 # there is no literal fallback: ADMIN_PASSWORD and DEFAULT_PASSWORD must be set, and the other
 # seeded accounts fall back to DEFAULT_PASSWORD.
-DEFAULT_PASSWORD = os.environ.get('DEFAULT_PASSWORD') or (None if IS_PRODUCTION else 'password')
+DEFAULT_PASSWORD = os.environ.get('DEFAULT_PASSWORD') or (None if IS_PRODUCTION else '123Qwerty!')
 if not DEFAULT_PASSWORD:
     raise RuntimeError('DEFAULT_PASSWORD must be set when IS_PRODUCTION=true')
 # Seeded accounts: one per role (admin / staff / member). The default uids and display
