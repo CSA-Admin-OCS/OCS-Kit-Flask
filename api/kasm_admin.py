@@ -2,13 +2,15 @@
 from datetime import datetime
 
 import requests
-from flask import Blueprint, current_app, jsonify, render_template
-from flask_login import current_user
+from flask import Blueprint, current_app, render_template
+
+from api.authorize import admin_page_required as admin_required
 
 kasm_admin = Blueprint('kasm_admin', __name__)
 
 
 @kasm_admin.route('/kasm_users')
+@admin_required
 def kasm_users():
     # Fetch configuration details from environment or app config
     SERVER = current_app.config.get('KASM_SERVER')
@@ -68,10 +70,8 @@ def kasm_users():
         
         
 @kasm_admin.route('/delete_user/<user_id>', methods=['DELETE'])
+@admin_required
 def delete_user_kasm(user_id):
-    if current_user.role != 'Admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     SERVER = current_app.config.get('KASM_SERVER')
     API_KEY = current_app.config.get('KASM_API_KEY')
     API_KEY_SECRET = current_app.config.get('KASM_API_KEY_SECRET')

@@ -1,5 +1,5 @@
-from flask import request, current_app, g
-from flask_login import current_user
+from flask import request, current_app, g, abort
+from flask_login import current_user, login_required
 from functools import wraps
 import jwt
 from model.user import User
@@ -138,3 +138,15 @@ def token_required(roles=None):
     Existing code using @token_required will continue to work.
     '''
     return auth_required(roles)
+
+
+def admin_page_required(view):
+    """For server-rendered admin pages (Flask-Login session): anonymous users are
+    redirected to the login page, logged-in non-Admins get 403."""
+    @wraps(view)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if current_user.role != 'Admin':
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapper
