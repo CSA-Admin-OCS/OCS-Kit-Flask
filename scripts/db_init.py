@@ -157,7 +157,7 @@ def main():
             # Seed data for enabled features only (kits/catalog.json 'seed' entries)
             import features
             print(f"Seeding kit '{features.kit_name()}': {', '.join(features.enabled_features())}")
-            generate_data() # test data
+            generate_data.callback()  # test data (call the function, not the click command, which would exit)
             
     except Exception as e:
         print(f"An error occurred: {e}")
