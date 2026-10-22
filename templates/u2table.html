@@ -22,13 +22,13 @@
         </thead>
         <tbody>
             {% for user in user_data %}
-            {% if user.id == current_user.id or current_user.role == 'Admin' %}
+            {% if user.id == current_user.id or current_user.is_admin() %}
             <tr id="user-{{ user.id }}">
                 <td>{{ user.id }}</td>
                 <td>{{ user.uid }}</td>
                 <td>{{ user.name }}</td>
                 <td>{{ user.email }}</td>
-                <td>{{ user.role }}</td>
+                <td>{{ user.role_label }}</td>
                 <td>
                     {% if user.pfp %}
                     <img src="{{ url_for('uploaded_file', filename=user.uid + '/' + user.pfp) }}" 
@@ -51,7 +51,7 @@
                 <td id="commits-{{ user.uid }}">Loading...</td>
                 <td>
                     <button class="btn btn-primary edit-btn" data-id="{{ user.id }}">Edit</button>
-                    {% if current_user.role == 'Admin' %}
+                    {% if current_user.is_admin() %}
                     <button class="btn btn-danger delete-btn" data-id="{{ user.id }}">Delete</button>
                     <button class="btn btn-warning reset-password-btn" data-id="{{ user.id }}">Reset Password</button>
                     {% endif %}

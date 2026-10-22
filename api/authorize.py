@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 from functools import wraps
 import jwt
 from model.user import User
+import roles as role_config
 
 def auth_required(roles=None):
     '''
@@ -21,7 +22,8 @@ def auth_required(roles=None):
       - JWT token authentication is fallback (stateless, works for APIs)
     
     Args:
-        roles: String or list of allowed roles (e.g., "Admin" or ["Admin", "Teacher"])
+        roles: Stored role name, or a list/tuple of them. Take them from roles.py
+               (e.g. roles.admin_role() or roles.staff_roles()), never a literal.
                If None, any authenticated user is allowed
     
     Possible error responses:
@@ -108,7 +110,7 @@ def auth_required(roles=None):
             # Now check role requirements if specified
             if roles:
                 # Normalize roles to list for consistent checking
-                required_roles = roles if isinstance(roles, list) else [roles]
+                required_roles = list(roles) if isinstance(roles, (list, tuple)) else [roles]
                 
                 if user.role not in required_roles:
                     return {
@@ -140,13 +142,22 @@ def token_required(roles=None):
     return auth_required(roles)
 
 
-def admin_page_required(view):
-    """For server-rendered admin pages (Flask-Login session): anonymous users are
-    redirected to the login page, logged-in non-Admins get 403."""
-    @wraps(view)
-    @login_required
-    def wrapper(*args, **kwargs):
-        if current_user.role != 'Admin':
-            abort(403)
-        return view(*args, **kwargs)
-    return wrapper
+def page_roles_required(allowed):
+    """Decorator factory for server-rendered admin pages (Flask-Login session).
+    allowed() returns the stored roles that may open the page. Anonymous users are
+    redirected to the login page; logged-in users without one of the roles get 403."""
+    def decorator(view):
+        @wraps(view)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if current_user.role not in allowed():
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# Pages only the admin role may open (user deletion, password resets, Kasm, ...)
+admin_page_required = page_roles_required(lambda: (role_config.admin_role(),))
+# Pages staff (e.g. Teacher / Manager / Editor) and admins may open (user list, sections)
+staff_page_required = page_roles_required(role_config.staff_roles)

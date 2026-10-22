@@ -10,6 +10,7 @@ import json
 from __init__ import app, db
 from model.github import GitHubUser
 import features
+import roles
 from model.kasm import KasmUser as _KasmUser
 
 
@@ -162,7 +163,7 @@ class User(db.Model, UserMixin):
     _email = db.Column(db.String(255), unique=False, nullable=False)
     _sid = db.Column(db.String(255), unique=False, nullable=True)
     _password = db.Column(db.String(255), unique=False, nullable=False)
-    _role = db.Column(db.String(20), default="User", nullable=False)
+    _role = db.Column(db.String(20), default=lambda: roles.member_role(), nullable=False)
     _pfp = db.Column(db.String(255), unique=False, nullable=True)
     kasm_server_needed = db.Column(db.Boolean, default=False)
     _grade_data = db.Column(db.JSON, unique=False, nullable=True)
@@ -188,14 +189,14 @@ class User(db.Model, UserMixin):
     personas = db.relationship('Persona', secondary='user_personas', lazy='subquery',
                                overlaps="user_personas_rel,persona,users")
     
-    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role="User", pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None, game_profile=None):
+    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role=None, pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None, game_profile=None):
         self._name = name
         self._uid = uid
         self._email = "?"
         self._sid = sid
         self.set_password(password)
         self.kasm_server_needed = kasm_server_needed
-        self._role = role
+        self._role = role or roles.signup_role()  # new accounts get the kit's signup role
         self._pfp = pfp
         self._grade_data = grade_data if grade_data else {}
         self._ap_exam = ap_exam if ap_exam else {}
@@ -322,10 +323,19 @@ class User(db.Model, UserMixin):
         self._role = role
 
     def is_admin(self):
-        return self._role == "Admin"
+        return self._role == roles.admin_role()
 
     def is_teacher(self):
-        return self._role == "Teacher"
+        """Staff role (stored as 'Teacher'; labelled per kit, e.g. 'Manager')."""
+        return self._role == roles.staff_role()
+
+    def is_staff(self):
+        """Staff or admin."""
+        return self._role in roles.staff_roles()
+
+    @property
+    def role_label(self):
+        return roles.label(self._role)
     
     # getter method for profile picture
     @property
@@ -484,6 +494,7 @@ class User(db.Model, UserMixin):
             "email": self.email,
             "sid": self.sid,
             "role": self.role,
+            "role_label": self.role_label,
             "pfp": self.pfp,
             "class": self._class if self._class is not None else [],
             "kasm_server_needed": self.kasm_server_needed,
@@ -797,9 +808,9 @@ def initUsers():
             'last_updated': None
         }
 
-        u1 = User(name=app.config['ADMIN_USER'], uid=app.config['ADMIN_UID'], password=app.config['ADMIN_PASSWORD'], pfp=app.config['ADMIN_PFP'], kasm_server_needed=True, role="Admin")
-        u2 = User(name=app.config['USER_NAME'], uid=app.config['USER_UID'], password=app.config['USER_PASSWORD'], pfp=app.config['USER_PFP'])
-        u3 = User(name=app.config['TEACHER_USER'], uid=app.config['TEACHER_UID'], pfp=app.config['TEACHER_PFP'], password=app.config['TEACHER_PASSWORD'], role='Teacher')
+        u1 = User(name=app.config['ADMIN_USER'], uid=app.config['ADMIN_UID'], password=app.config['ADMIN_PASSWORD'], pfp=app.config['ADMIN_PFP'], kasm_server_needed=True, role=roles.admin_role())
+        u2 = User(name=app.config['USER_NAME'], uid=app.config['USER_UID'], password=app.config['USER_PASSWORD'], pfp=app.config['USER_PFP'], role=roles.member_role())
+        u3 = User(name=app.config['TEACHER_USER'], uid=app.config['TEACHER_UID'], pfp=app.config['TEACHER_PFP'], password=app.config['TEACHER_PASSWORD'], role=roles.staff_role())
         u4 = User(name=app.config['MY_NAME'], uid=app.config['MY_UID'], pfp=app.config['MY_PFP'], password=app.config['MY_PASSWORD'], role=app.config['MY_ROLE'])
 
         users = [u1, u2, u3, u4]

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 # import "objects" from "this" project
 from __init__ import app, db, login_manager  # Key Flask objects 
 import features  # kit feature registry; kits/catalog.json says what belongs to each feature
+import roles  # role names and per-kit labels from kits/catalog.json
 
 # Models: every feature's models are imported whatever the kit, so all tables and
 # foreign keys exist in every kit (the User model relates to personas, posts, etc.).
@@ -75,6 +76,8 @@ def inject_kit_config():
         social_youtube=app.config.get('SOCIAL_YOUTUBE_URL'),
         # Kit features: templates hide links to disabled features
         kit_features=features.enabled_features(),
+        # Role labels of this kit, e.g. {'Admin': 'Admin', 'Teacher': 'Manager', 'User': 'Member'}
+        role_labels=roles.labels(),
         admin_links=features.admin_links(),
     )
 
@@ -145,7 +148,7 @@ def delete_user(user_id):
 @app.route('/users/reset_password/<int:user_id>', methods=['POST'])
 @login_required
 def reset_password(user_id):
-    if current_user.role != 'Admin':
+    if not current_user.is_admin():
         return jsonify({'error': 'Unauthorized'}), 403
     
     user = User.query.get(user_id)
@@ -160,7 +163,7 @@ def reset_password(user_id):
 @app.route('/update_user/<string:uid>', methods=['PUT'])
 def update_user(uid):
     # Authorization check
-    if current_user.role != 'Admin':
+    if not current_user.is_admin():
         return jsonify({'error': 'Unauthorized'}), 403
 
     # Get the JSON data from the request

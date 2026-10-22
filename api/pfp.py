@@ -65,7 +65,7 @@ class _PFP(Resource):
         """
         current_user = g.current_user
 
-        if current_user.role != 'Admin':
+        if not current_user.is_admin():
             return {'message': 'Unauthorized.'}, 401
 
         user_uid = request.args.get('uid')

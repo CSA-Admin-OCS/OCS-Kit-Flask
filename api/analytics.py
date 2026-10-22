@@ -212,7 +212,7 @@ class AdminUserIssues(Resource):
     def get(self, uid):
         try:
             # Check if the current user is an Admin
-            if g.current_user.role != 'Admin':
+            if not g.current_user.is_admin():
                 return {'message': 'Access denied: Admins only.'}, 403
 
             # Fetch the request body to extract date range (if any)
@@ -252,7 +252,7 @@ class AdminUserCommits(Resource):
     def get(self, uid):
         try:
             # Check if the current user has 'Admin' role; if not, deny access with a 403 status
-            if g.current_user.role != 'Admin':
+            if not g.current_user.is_admin():
                 return {'message': 'Access denied: Admins only.'}, 403
 
             # Attempt to parse the request's JSON body; if the request does not contain valid JSON, assign an empty dictionary

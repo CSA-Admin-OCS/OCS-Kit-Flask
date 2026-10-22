@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app, Response, g
+import roles
 from flask_restful import Api, Resource # used for REST API building
 from datetime import datetime
 import jwt
@@ -14,7 +15,7 @@ api = Api(section_api)
 class SectionAPI:        
          
     class _CRUD(Resource):  # Users API operation for Create, Read, Update, Delete 
-        @token_required("Admin")
+        @token_required(roles.admin_role())
         def post(self): # Create method
             ''' Read data for json body '''
             body = request.get_json()
@@ -51,7 +52,7 @@ class SectionAPI:
             # return response, a json list of user dictionaries
             return jsonify(json_ready)
         
-        @token_required("Admin")
+        @token_required(roles.admin_role())
         def delete(self): # Delete Method
             body = request.get_json()
             abbreviation = body.get('abbreviation')

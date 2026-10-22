@@ -74,21 +74,28 @@ cors = CORS(
 DEFAULT_PASSWORD = os.environ.get('DEFAULT_PASSWORD') or (None if IS_PRODUCTION else 'password')
 if not DEFAULT_PASSWORD:
     raise RuntimeError('DEFAULT_PASSWORD must be set when IS_PRODUCTION=true')
+# Seeded accounts: one per role (admin / staff / member). The default uids and display
+# names come from the kit (kits/catalog.json: e.g. education seeds 'teacher' and 'student',
+# business 'manager' and 'member'); the ADMIN_* / TEACHER_* (staff) / USER_* (member) env
+# variables still override them. An unknown KIT or FEATURES value fails here, at startup.
+import features as _features
+import roles as _roles
+_features.enabled_features()
 # Admin Defaults
-app.config['ADMIN_USER'] = os.environ.get('ADMIN_USER') or 'Admin Name'
-app.config['ADMIN_UID'] = os.environ.get('ADMIN_UID') or 'admin'
+app.config['ADMIN_USER'] = os.environ.get('ADMIN_USER') or f"{_roles.label(_roles.admin_role())} Name"
+app.config['ADMIN_UID'] = os.environ.get('ADMIN_UID') or _roles.seed_uid('admin')
 app.config['ADMIN_PASSWORD'] = os.environ.get('ADMIN_PASSWORD') or (None if IS_PRODUCTION else DEFAULT_PASSWORD)
 if not app.config['ADMIN_PASSWORD']:
     raise RuntimeError('ADMIN_PASSWORD must be set when IS_PRODUCTION=true')
 app.config['ADMIN_PFP'] = os.environ.get('ADMIN_PFP') or 'default.png'
 # Teacher Defaults
-app.config['TEACHER_USER'] = os.environ.get('TEACHER_USER') or 'Teacher Name'
-app.config['TEACHER_UID'] = os.environ.get('TEACHER_UID') or 'teacher'
+app.config['TEACHER_USER'] = os.environ.get('TEACHER_USER') or f"{_roles.label(_roles.staff_role())} Name"
+app.config['TEACHER_UID'] = os.environ.get('TEACHER_UID') or _roles.seed_uid('staff')
 app.config['TEACHER_PASSWORD'] = os.environ.get('TEACHER_PASSWORD') or DEFAULT_PASSWORD
 app.config['TEACHER_PFP'] = os.environ.get('TEACHER_PFP') or 'default.png'
 # Default User Defaults
-app.config['USER_NAME'] = os.environ.get('USER_NAME') or 'User Name'
-app.config['USER_UID'] = os.environ.get('USER_UID') or 'user'
+app.config['USER_NAME'] = os.environ.get('USER_NAME') or f"{_roles.label(_roles.member_role())} Name"
+app.config['USER_UID'] = os.environ.get('USER_UID') or _roles.seed_uid('member')
 app.config['USER_PASSWORD'] = os.environ.get('USER_PASSWORD') or DEFAULT_PASSWORD
 app.config['USER_PFP'] = os.environ.get('USER_PFP') or 'default.png'
 # Defaults
@@ -104,7 +111,7 @@ app.config['MY_NAME'] = os.environ.get('MY_NAME') or 'convenience'
 app.config['MY_UID'] = os.environ.get('MY_UID') or 'convenience'
 app.config['MY_PASSWORD'] = os.environ.get('MY_PASSWORD') or DEFAULT_PASSWORD
 app.config['MY_PFP'] = os.environ.get('MY_PFP') or 'default.png'
-app.config['MY_ROLE'] = os.environ.get('MY_ROLE') or 'User'
+app.config['MY_ROLE'] = os.environ.get('MY_ROLE') or _roles.member_role()
 
 
 # Browser settings

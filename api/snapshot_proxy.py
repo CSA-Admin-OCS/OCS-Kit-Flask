@@ -6,6 +6,7 @@ to the tracking-database-automator's internal API.
 import os
 import requests
 from flask import Blueprint, jsonify
+import roles
 from api.authorize import token_required
 
 snapshot_proxy = Blueprint('snapshot_proxy', __name__, url_prefix='/api/snapshot')
@@ -35,12 +36,12 @@ def _proxy_snapshot(snapshot_type: str):
 
 
 @snapshot_proxy.route('/aurora', methods=['POST'])
-@token_required("Admin")
+@token_required(roles.admin_role())
 def trigger_aurora():
     return _proxy_snapshot("aurora")
 
 
 @snapshot_proxy.route('/sqlite', methods=['POST'])
-@token_required("Admin")
+@token_required(roles.admin_role())
 def trigger_sqlite():
     return _proxy_snapshot("sqlite")
