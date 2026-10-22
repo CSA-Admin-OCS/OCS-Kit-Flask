@@ -5,6 +5,11 @@ services:
     build: .
     env_file:
       - .env # copy .env.example to .env and edit it
+    environment:
+      # Kit feature selection (README "Choosing a kit"). Read from .env or the shell,
+      # e.g. KIT=education docker compose up -d
+      KIT: ${KIT:-}
+      FEATURES: ${FEATURES:-}
     ports:
       - "8587:8587"
     volumes:

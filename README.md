@@ -30,6 +30,49 @@ Data lives in `./instance` on the host, which is mounted into the container. Bac
 
 To wipe and re-create the database, set `DB_INIT=true` for one start. This is destructive and drops all tables.
 
+## Choosing a kit
+
+A kit is a preset list of features. Pick one with `KIT` in `.env`:
+
+| `KIT` | What you get |
+|-------|--------------|
+| `vanilla` | Core only: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. |
+| `education` | A CS classroom: core plus code runners, assignments, game engine, AI assistants, analytics and social (plus lessons, calendar and hall pass, which have no Flask code). |
+| `business` | Everything. This is the default when `KIT` is empty. |
+
+Check what is running with `curl http://localhost:8587/api/kit`, which returns e.g. `{"kit": "education", "name": "OCS Education", "customized": false, "features": [...]}`. It needs no login. Endpoints of disabled features return 404, and their admin links are hidden. `python -m features --list` prints the kits and features and shows which are enabled.
+
+### Customizing features
+
+`FEATURES` changes the kit's list:
+
+```bash
+KIT=education
+FEATURES=+examples,-hallpass   # add or remove features relative to the kit
+FEATURES=ai,social             # an explicit list replaces the kit (core is always added)
+FEATURES=*,-kasm               # everything except Kasm
+```
+
+`core` is always on and cannot be removed. An unknown kit or feature id stops the app at startup with an error that lists the valid ids. Restart the container after you change `.env`.
+
+Every feature's database tables are always created, whatever the kit. Only the seed data and the API endpoints depend on the kit. So you can turn a feature on later without a migration: restart and its endpoints appear (re-run `scripts/db_init.py` only if you also want its sample data).
+
+### Adding a new feature
+
+All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
+
+1. Add the feature id, name and description to the canonical `OCS-Kit/kits/catalog.json`, and to its kit presets if needed. Copy them verbatim into this repo's `kits/catalog.json`.
+2. Write the code: a blueprint in `api/`, and any models in `model/`.
+3. In this repo's catalog, under the feature's `"flask"` block, list:
+   - `blueprints`: `"api.my_api:my_api"`. These are registered only when the feature is on.
+   - `models`: `"model.my_model"`. These are always imported, so their tables always exist.
+   - `seed`: `"model.my_model:initMyThings"`. `db_init.py` runs these when the feature is on.
+   - `startup` (optional): functions that run at app start when the feature is on.
+   - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar.
+4. Run `python -m features --check` and `python -m pytest tests`. The check fails on unknown ids, references that don't import, a blueprint claimed by two features, any blueprint in `api/` or `hacks/` that no feature lists (so new code can't skip gating), and drift from the canonical catalog.
+
+To add a feature to an existing feature's code, append to that feature's lists instead.
+
 ## Going to production
 
 1. In `.env`, set `IS_PRODUCTION=true`. The app then refuses to start without `SECRET_KEY`, `ADMIN_PASSWORD` and `DEFAULT_PASSWORD`, and it sends secure, cross-site cookies.
@@ -39,7 +82,7 @@ To wipe and re-create the database, set `DB_INIT=true` for one start. This is de
 5. Put nginx in front of the backend using [`deploy/nginx.conf.template`](deploy/nginx.conf.template). The instructions for filling it in with `envsubst` and getting a certificate with certbot are at the top of that file.
 6. To use MySQL instead of SQLite, set `DB_ENDPOINT`, `DB_USERNAME` and `DB_PASSWORD`. Set `DB_INIT=true` for the first boot only.
 
-Optional features turn themselves off when their settings are empty:
+Within the enabled kit features, integrations that need settings turn themselves off when those settings are empty:
 - Gemini and Groq AI chat
 - Kasm virtual desktops
 - GitHub feedback issues (`FEEDBACK_GITHUB_REPO`)
@@ -74,7 +117,9 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 
 | Path | Purpose |
 |------|---------|
-| `main.py` | App entry point: registers blueprints and admin routes |
+| `main.py` | App entry point: registers enabled features' blueprints and core admin routes |
+| `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
+| `tests/` | `python -m pytest tests` |
 | `__init__.py` | Flask app, configuration from environment, database setup |
 | `api/` | REST API blueprints |
 | `model/` | SQLAlchemy models and seed data |
@@ -87,7 +132,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 
 ## Database scripts
 
-- `scripts/db_init.py` drops all tables, recreates them and seeds the default data. It asks for confirmation unless `FORCE_YES=true`. It backs up SQLite to `instance/volumes/user_management_bak.db`, or MySQL with `mysqldump` to `instance/backups/`.
+- `scripts/db_init.py` drops all tables, recreates every table (all features) and seeds the default data of the enabled features. It asks for confirmation unless `FORCE_YES=true`. It backs up SQLite to `instance/volumes/user_management_bak.db`, or MySQL with `mysqldump` to `instance/backups/`.
 - `scripts/db_migrate-prod2sqlite.py` pulls all data from a running server (`FLASK_BASE_URL`) into the local SQLite database through the admin-only `/api/export/*` endpoints.
 - `scripts/db_restore-sqlite2prod.py` pushes local data back to that server.
 
