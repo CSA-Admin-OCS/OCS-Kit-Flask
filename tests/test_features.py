@@ -19,7 +19,20 @@ def test_catalog_matches_code():
 
 
 def test_default_is_everything():
-    assert resolve(None, None) == ('business', False, ALL)
+    assert resolve(None, None) == ('default', False, ALL)
+
+
+def test_business_excludes_education_features():
+    kit, customized, enabled = resolve('business', None)
+    cat = features.load_catalog()['features']
+    assert kit == 'business' and not customized
+    assert all(cat[f]['category'] != 'education' for f in enabled)
+    assert set(enabled) == set(features.load_catalog()['kits']['business']['features'])
+
+
+def test_star_override_means_every_feature():
+    kit, customized, enabled = resolve('business', '+*')
+    assert enabled == ALL and customized
 
 
 def test_vanilla_is_core_only():
@@ -35,11 +48,11 @@ def test_education_preset():
 def test_relative_overrides():
     kit, customized, enabled = resolve('education', '+finance-sim, -hallpass')
     assert kit == 'education' and customized
-    assert 'finance-sim' in enabled and 'hallpass' not in enabled and 'ai' in enabled
+    assert 'finance-sim' in enabled and 'hallpass' not in enabled and 'ai-chatbot' in enabled
 
 
 def test_explicit_list_ignores_kit():
-    assert resolve('education', 'ai,social') == ('custom', False, ['core', 'ai', 'social'])
+    assert resolve('education', 'ai-chatbot,social') == ('custom', False, ['core', 'ai-chatbot', 'social'])
 
 
 def test_star_minus():
@@ -66,10 +79,23 @@ def test_check_flags_unmapped_blueprint(patched_catalog):
 
 
 def test_check_flags_double_claim(patched_catalog):
-    patched_catalog['features']['ai']['flask']['blueprints'].append('hacks.joke:joke_api')
+    patched_catalog['features']['ai-chatbot']['flask']['blueprints'].append('hacks.joke:joke_api')
     assert any('claimed by both' in p for p in features.check())
 
 
 def test_check_flags_missing_module(patched_catalog):
-    patched_catalog['features']['ai']['flask']['blueprints'].append('api.does_not_exist:bp')
+    patched_catalog['features']['ai-chatbot']['flask']['blueprints'].append('api.does_not_exist:bp')
     assert any('does_not_exist' in p for p in features.check())
+
+
+def test_check_flags_label_and_category(patched_catalog):
+    patched_catalog['features']['kasm']['labels'].append('no-such-label')
+    patched_catalog['features']['kasm']['category'] = 'nope'
+    probs = features.check()
+    assert any('no-such-label' in p for p in probs) and any("category 'nope'" in p for p in probs)
+
+
+def test_check_flags_unowned_uses_blueprint(patched_catalog):
+    patched_catalog['features']['ai-grading']['flask']['uses_blueprints'] = ['api.kit_api:kit_api', 'api.nope:x']
+    probs = features.check()
+    assert any('api.nope:x' in p for p in probs)

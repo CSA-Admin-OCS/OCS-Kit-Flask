@@ -37,10 +37,27 @@ A kit is a preset list of features. Pick one with `KIT` in `.env`:
 | `KIT` | What you get |
 |-------|--------------|
 | `vanilla` | Core only: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. |
-| `education` | A CS classroom: core plus code runners, assignments, game engine, AI assistants, analytics and social (plus lessons, calendar and hall pass, which have no Flask code). |
-| `business` | Everything. This is the default when `KIT` is empty. |
+| `education` | A CS classroom: core, lessons, code runners, assignments, game engine, AI chatbot, AI grading, calendar, analytics, hall pass and social. |
+| `business` | Core plus every *general* feature: code runners, game engine, AI chatbot, social, calendar, analytics, finance sim, resume, Kasm, face recognition and examples. It leaves out the *education* features: lessons, assignments, AI grading and hall pass. |
+| *(empty)* | Every feature, as before kits existed. `/api/kit` then reports `"kit": "default"`. |
 
-Check what is running with `curl http://localhost:8587/api/kit`, which returns e.g. `{"kit": "education", "name": "OCS Education", "customized": false, "features": [...]}`. It needs no login. Endpoints of disabled features return 404, and their admin links are hidden. `python -m features --list` prints the kits and features and shows which are enabled.
+Each feature has a **category**: `core` is always on, `general` features are useful to any organization, and `education` features are for classrooms. Each feature also has **labels** that say what it needs and what data it handles, such as `needs-api-key`, `personal-data`, `student-safe` or `runs-code`. Check the labels before you turn a feature on. The full list is in [`kits/catalog.json`](kits/catalog.json).
+
+| Feature | Category | Flask endpoints (prefix) |
+|---------|----------|--------------------------|
+| `core` | core | `/api/kit`, `/api/authenticate`, `/api/user`, `/api/section`, `/api/id` (pfp), `/api/classrooms`, `/api/export`, `/api/feedback`, admin pages |
+| `code-runner` | general | `/run/python`, `/run/javascript` |
+| `game-engine` | general | `/api/ainpc`, `/api/profile/game`, `/api/dynamic`, `/api/events` |
+| `ai-chatbot` | general | `/api/gemini`, `/api/groq` |
+| `ai-grading` | education | No endpoints of its own. It uses `/api/gemini`, including `/api/gemini/summarize-submissions`, so turning it on registers the Gemini proxy even when `ai-chatbot` is off. |
+| `social` | general | `/api/microblog`, `/api/post`, `/api/persona`, `/persona/` admin page |
+| `analytics` | general | `/api/analytics`, `/api/user/skill-passport`, `/api/user/skill-snapshot`, `/api/admin/skill-passport`, `/api/snapshot` |
+| `assignments` | education | `/api/study` (`/api/grade` exists but is not registered) |
+| `kasm` | general | `/kasm_users` admin page; Kasm user sync in the User model |
+| `examples` | general | `/api/jokes`, `/api/student/*`, `/api/students`, `/api/congrats` |
+| `lessons`, `calendar`, `hallpass`, `finance-sim`, `resume`, `face-recognition` | | No Flask code. These are served by the Pages and Spring backends. |
+
+Check what is running with `curl http://localhost:8587/api/kit`. It needs no login and returns e.g. `{"kit": "education", "name": "OCS Education", "customized": false, "features": ["core", ...], "feature_details": [{"id": "core", "name": "Core platform", "category": "core", "labels": [...]}, ...]}`. Endpoints of disabled features return 404, and their admin links are hidden. `python -m features --list` prints the kits, categories and features, and shows which are enabled.
 
 ### Customizing features
 
@@ -48,9 +65,11 @@ Check what is running with `curl http://localhost:8587/api/kit`, which returns e
 
 ```bash
 KIT=education
-FEATURES=+examples,-hallpass   # add or remove features relative to the kit
-FEATURES=ai,social             # an explicit list replaces the kit (core is always added)
-FEATURES=*,-kasm               # everything except Kasm
+KIT=business
+FEATURES=+hallpass,-kasm       # add or remove features relative to the kit
+FEATURES=+*                    # the kit plus every other feature
+FEATURES=ai-chatbot,social     # an explicit list replaces the kit (core is always added)
+FEATURES=*,-kasm               # every feature except Kasm
 ```
 
 `core` is always on and cannot be removed. An unknown kit or feature id stops the app at startup with an error that lists the valid ids. Restart the container after you change `.env`.
@@ -61,15 +80,16 @@ Every feature's database tables are always created, whatever the kit. Only the s
 
 All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
 
-1. Add the feature id, name and description to the canonical `OCS-Kit/kits/catalog.json`, and to its kit presets if needed. Copy them verbatim into this repo's `kits/catalog.json`.
+1. Add the feature (id, name, category, labels, description) to the canonical `OCS-Kit/kits/catalog.json`, and add it to the kit presets that should include it. Copy those entries, and the `categories`, `labels` and `kits` maps, verbatim into this repo's `kits/catalog.json`.
 2. Write the code: a blueprint in `api/`, and any models in `model/`.
 3. In this repo's catalog, under the feature's `"flask"` block, list:
-   - `blueprints`: `"api.my_api:my_api"`. These are registered only when the feature is on.
+   - `blueprints`: `"api.my_api:my_api"`. These are registered only when the feature is on. Each blueprint has exactly one owning feature.
+   - `uses_blueprints` (optional): blueprints owned by another feature that this feature also needs. They are registered when either feature is on.
    - `models`: `"model.my_model"`. These are always imported, so their tables always exist.
    - `seed`: `"model.my_model:initMyThings"`. `db_init.py` runs these when the feature is on.
    - `startup` (optional): functions that run at app start when the feature is on.
    - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar.
-4. Run `python -m features --check` and `python -m pytest tests`. The check fails on unknown ids, references that don't import, a blueprint claimed by two features, any blueprint in `api/` or `hacks/` that no feature lists (so new code can't skip gating), and drift from the canonical catalog.
+4. Run `python -m features --check` and `python -m pytest tests`. The check fails on unknown ids, categories or labels, references that don't import, a blueprint claimed by two features, any blueprint in `api/` or `hacks/` that no feature lists (so new code can't skip gating), and drift from the canonical catalog.
 
 To add a feature to an existing feature's code, append to that feature's lists instead.
 

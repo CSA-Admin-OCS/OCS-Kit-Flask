@@ -6,7 +6,8 @@ main.py and scripts/db_init.py only iterate this registry; nothing here is per-f
 
 Which features are enabled (resolved once per process from the environment):
 
-    KIT       starting preset: vanilla | education | business (unset = business, everything on)
+    KIT       starting preset: vanilla | education | business
+              (unset = 'default': every feature on, as before kits existed)
     FEATURES  customizes the preset:
                 "+finance-sim,-hallpass"  add/remove relative to KIT
                 "core,ai,social"          explicit full list (ignores KIT)
@@ -27,8 +28,8 @@ CATALOG_PATH = os.path.join(ROOT, 'kits', 'catalog.json')
 # Canonical catalog shared by all OCS-Kit repos (only present in a dev checkout of the parent repo)
 CANONICAL_PATH = os.environ.get('KIT_CANONICAL_CATALOG') or os.path.join(ROOT, '..', 'OCS-Kit', 'kits', 'catalog.json')
 CORE = 'core'
-DEFAULT_KIT = 'business'
-FLASK_KEYS = ('blueprints', 'inactive_blueprints', 'models', 'seed', 'startup', 'admin_links')
+DEFAULT_KIT = 'default'  # reported kit name when KIT is unset: every feature enabled
+FLASK_KEYS = ('blueprints', 'uses_blueprints', 'inactive_blueprints', 'models', 'seed', 'startup', 'admin_links')
 
 
 class FeatureConfigError(ValueError):
@@ -87,13 +88,15 @@ def resolve(kit=None, features=None, catalog=None):
     if kit and kit not in kits:
         raise FeatureConfigError(f"Unknown KIT '{kit}'. Valid kits: {', '.join(kits)}")
     kit_name = kit or DEFAULT_KIT
+    preset_ids = kits[kit]['features'] if kit else ['*']
+    preset = set(_expand(preset_ids, all_ids, f"kit '{kit_name}'")) | {CORE}
 
     explicit = [t for t in tokens if t[0] not in '+-']
     if explicit:
         enabled = set(_expand(explicit, all_ids, 'FEATURES'))
         kit_name = kit_name if set(explicit) == {'*'} and not kit else 'custom'
     else:
-        enabled = set(_expand(kits[kit_name]['features'], all_ids, f"kit '{kit_name}'"))
+        enabled = set(preset)
 
     for t in tokens:
         if t[0] == '+':
@@ -105,10 +108,7 @@ def resolve(kit=None, features=None, catalog=None):
             enabled.difference_update(removed)
 
     enabled.add(CORE)
-    customized = False
-    if kit_name != 'custom':
-        preset = set(_expand(kits[kit_name]['features'], all_ids, f"kit '{kit_name}'")) | {CORE}
-        customized = enabled != preset
+    customized = kit_name != 'custom' and enabled != preset
     return kit_name, customized, [f for f in all_ids if f in enabled]
 
 
@@ -136,12 +136,21 @@ def is_enabled(fid):
 def kit_info():
     """Public summary served by GET /api/kit."""
     name, customized, enabled = _state()
-    kit = load_catalog()['kits'].get(name, {})
+    catalog = load_catalog()
+    kit = catalog['kits'].get(name, {})
+    default_names = {DEFAULT_KIT: 'All features (KIT not set)', 'custom': 'Custom'}
     return {
         'kit': name,
-        'name': kit.get('name', 'Custom'),
+        'name': kit.get('name', default_names.get(name, name)),
         'customized': customized,
-        'features': enabled,
+        'features': enabled,  # list of ids (stable contract)
+        'feature_details': [
+            {'id': fid,
+             'name': catalog['features'][fid]['name'],
+             'category': catalog['features'][fid].get('category'),
+             'labels': catalog['features'][fid].get('labels', [])}
+            for fid in enabled
+        ],
     }
 
 
@@ -162,10 +171,15 @@ def import_all_models():
 
 
 def register_blueprints(app):
-    """Register blueprints of enabled features only; returns [(feature, blueprint name)]."""
-    done = []
+    """Register blueprints of enabled features only ('blueprints' + 'uses_blueprints');
+    returns [(feature, blueprint name)]."""
+    done, seen = [], set()
     for fid in enabled_features():
-        for ref in flask_spec(fid)['blueprints']:
+        spec = flask_spec(fid)
+        for ref in spec['blueprints'] + spec['uses_blueprints']:
+            if ref in seen:
+                continue
+            seen.add(ref)
             bp = load_ref(ref)
             app.register_blueprint(bp)
             done.append((fid, bp.name))
@@ -198,7 +212,13 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
     # 1. catalog shape and kit presets
     if CORE not in all_ids:
         problems.append("catalog has no 'core' feature")
+    categories, labels = catalog.get('categories', {}), catalog.get('labels', {})
     for fid, f in catalog['features'].items():
+        if f.get('category') not in categories:
+            problems.append(f"feature '{fid}': category {f.get('category')!r} not in 'categories'")
+        for lab in f.get('labels', []):
+            if lab not in labels:
+                problems.append(f"feature '{fid}': label '{lab}' not in 'labels'")
         extra = set(f.get('flask', {})) - set(FLASK_KEYS)
         if extra:
             problems.append(f"feature '{fid}': unknown flask keys {sorted(extra)}")
@@ -220,8 +240,9 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
             for key in set(cf) | (set(mine) - {'flask'}):
                 if mine.get(key) != cf.get(key):
                     problems.append(f"feature '{fid}' field '{key}' differs from canonical catalog")
-        if canon['kits'] != catalog['kits']:
-            problems.append(f"kit presets differ from canonical {canonical_path}")
+        for key in ('categories', 'labels', 'kits'):
+            if canon.get(key) != catalog.get(key):
+                problems.append(f"top-level '{key}' differs from canonical {canonical_path}")
     elif require_canonical:
         problems.append(f"canonical catalog not found at {canonical_path}")
     else:
@@ -232,7 +253,7 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
     blueprint_owner = {}
     for fid in all_ids:
         spec = flask_spec(fid, catalog)
-        for kind in ('blueprints', 'inactive_blueprints', 'models', 'seed', 'startup'):
+        for kind in ('blueprints', 'inactive_blueprints', 'models', 'seed', 'startup'):  # owned
             for ref in spec[kind]:
                 try:
                     obj = load_ref(ref)
@@ -249,6 +270,13 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
                     blueprint_owner[obj.name] = fid
                 elif kind in ('seed', 'startup') and not callable(obj):
                     problems.append(f"feature '{fid}' {kind}: '{ref}' is not callable")
+
+    # 3b. 'uses_blueprints' must point at a blueprint another feature owns
+    owned_refs = {ref: fid for fid in all_ids for ref in flask_spec(fid, catalog)['blueprints']}
+    for fid in all_ids:
+        for ref in flask_spec(fid, catalog)['uses_blueprints']:
+            if owned_refs.get(ref) in (None, fid):
+                problems.append(f"feature '{fid}' uses_blueprints '{ref}': not owned by another feature's 'blueprints'")
 
     # 4. no blueprint in api/ or hacks/ may bypass gating
     for pkg in ('api', 'hacks'):
@@ -283,6 +311,9 @@ def print_list():
     print("Kits:")
     for kid, kit in catalog['kits'].items():
         print(f"  {kid:<10} {kit['name']}: {', '.join(kit['features'])}")
+    print("\nCategories:")
+    for cid, cat in catalog.get('categories', {}).items():
+        print(f"  {cid:<10} {cat['description']}")
     try:
         name, customized, enabled = _state()
     except FeatureConfigError as e:
@@ -291,8 +322,10 @@ def print_list():
     print("\nFeatures:")
     for fid, f in catalog['features'].items():
         mark = 'on ' if fid in enabled else 'off'
-        bps = [r.split(':')[1] for r in flask_spec(fid, catalog)['blueprints']]
-        print(f"  [{mark}] {fid:<17} {f['name']}" + (f"  (blueprints: {', '.join(bps)})" if bps else ''))
+        spec = flask_spec(fid, catalog)
+        bps = [r.split(':')[1] for r in spec['blueprints']] + [r.split(':')[1] + ' (shared)' for r in spec['uses_blueprints']]
+        print(f"  [{mark}] {fid:<17} {f.get('category', '?'):<10} {f['name']}  [{', '.join(f.get('labels', []))}]"
+              + (f"\n{'':<36}blueprints: {', '.join(bps)}" if bps else ''))
     if name:
         print(f"\nKIT={os.environ.get('KIT') or '(unset)'} FEATURES={os.environ.get('FEATURES') or '(unset)'}"
               f" -> kit '{name}'{' (customized)' if customized else ''}, {len(enabled)} features enabled")
