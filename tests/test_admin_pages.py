@@ -1,60 +1,41 @@
-"""Admin pages moved out of main.py into feature blueprints must stay admin-only.
-
-Uses a stub Flask-Login user loader, so no database is needed.
-"""
-import os
-import sys
-
+"""Server-rendered admin pages: staff pages for staff and admins, admin pages for admins only."""
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-os.environ.pop('KIT', None)  # KIT unset: every feature on, so every admin page is served
-os.environ.pop('FEATURES', None)
+from conftest import ADMIN, MEMBER, STAFF, login
 
-from flask_login import UserMixin  # noqa: E402
-
-from main import app, login_manager  # noqa: E402
-
-ADMIN_PAGES = [('GET', '/kasm_users'), ('DELETE', '/delete_user/123'), ('GET', '/persona/')]
+STAFF_PAGES = [('GET', '/users/table2'), ('GET', '/sections/')]
+ADMIN_PAGES = [('DELETE', '/users/delete/99999'), ('POST', '/users/reset_password/99999'),
+               ('PUT', '/update_user/nobody'), ('GET', '/kasm_users'), ('DELETE', '/delete_user/123')]
 
 
-class _StubUser(UserMixin):
-    def __init__(self, uid, role):
-        self.id, self.role = uid, role
+@pytest.mark.parametrize('method,url', STAFF_PAGES + ADMIN_PAGES)
+def test_anonymous_is_sent_to_login(app, method, url):
+    r = login(app, None).open(url, method=method, json={})
+    assert r.status_code == 302 and '/login' in r.headers['Location']
 
 
-_USERS = {'1': _StubUser('1', 'Admin'), '2': _StubUser('2', 'User')}
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setattr(login_manager, '_user_callback', lambda uid: _USERS.get(uid))
-    app.config['TESTING'] = True
-    return app.test_client()
-
-
-def _login(client, uid):
-    with client.session_transaction() as sess:
-        sess['_user_id'] = uid
-        sess['_fresh'] = True
+@pytest.mark.parametrize('method,url', STAFF_PAGES + ADMIN_PAGES)
+def test_member_is_forbidden(app, method, url):
+    assert login(app, MEMBER).open(url, method=method, json={}).status_code == 403
 
 
 @pytest.mark.parametrize('method,url', ADMIN_PAGES)
-def test_anonymous_is_sent_to_login(client, method, url):
-    r = client.open(url, method=method)
-    assert r.status_code in (302, 401)
-    if r.status_code == 302:
-        assert '/login' in r.headers['Location']
+def test_staff_is_forbidden_on_admin_pages(app, method, url):
+    assert login(app, STAFF).open(url, method=method, json={}).status_code == 403
 
 
-@pytest.mark.parametrize('method,url', ADMIN_PAGES)
-def test_non_admin_is_forbidden(client, method, url):
-    _login(client, '2')
-    assert client.open(url, method=method).status_code == 403
+@pytest.mark.parametrize('uid', [STAFF, ADMIN])
+@pytest.mark.parametrize('method,url', STAFF_PAGES)
+def test_staff_and_admin_open_staff_pages(app, uid, method, url):
+    assert login(app, uid).open(url, method=method).status_code == 200
 
 
-def test_admin_passes_the_check(client, monkeypatch):
-    monkeypatch.setitem(app.config, 'KASM_SERVER', None)
-    _login(client, '1')
-    # No Kasm server is configured in tests, so the page reports missing keys (400) -- past auth.
-    assert client.get('/kasm_users').status_code == 400
+def test_admin_passes_admin_checks(app):
+    client = login(app, ADMIN)
+    assert client.delete('/users/delete/99999').status_code == 404       # past auth: no such user
+    assert client.get('/kasm_users').status_code == 400                  # past auth: no Kasm keys
+
+
+def test_user_table_shows_kit_role_labels(app):
+    page = login(app, ADMIN).get('/users/table2').get_data(as_text=True)
+    assert 'Teacher' in page and 'Student' in page  # education labels for Teacher / User
