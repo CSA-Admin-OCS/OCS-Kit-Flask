@@ -31,7 +31,7 @@ from datetime import datetime
 # Add the directory containing main.py to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Import application object
-from main import app, db, generate_data
+from main import app, db, seed_data
 
 BACKUP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'instance', 'backups'))
 
@@ -157,7 +157,7 @@ def main():
             # Seed data for enabled features only (kits/catalog.json 'seed' entries)
             import features
             print(f"Seeding kit '{features.kit_name()}': {', '.join(features.enabled_features())}")
-            generate_data.callback()  # test data (call the function, not the click command, which would exit)
+            seed_data()  # test data (a plain function: the generate_data click command would exit)
             
     except Exception as e:
         print(f"An error occurred: {e}")

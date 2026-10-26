@@ -194,11 +194,15 @@ def update_user(uid):
 # Create an AppGroup for custom commands
 custom_cli = AppGroup('custom', help='Custom commands')
 
-# Define a command to run the data generation functions
+def seed_data():
+    """Seed functions of enabled features, in catalog order (core's initUsers first)."""
+    features.run_hooks('seed')
+
+
+# flask custom generate_data
 @custom_cli.command('generate_data')
 def generate_data():
-    # Seed functions of enabled features, in catalog order (core's initUsers first)
-    features.run_hooks('seed')
+    seed_data()
 
 # Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)
