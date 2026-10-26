@@ -108,6 +108,13 @@ def test_disable_answers_404_without_restart(app):
     assert anon.get('/api/jokes/').status_code == 200
 
 
+def test_disabled_feature_answers_404_for_wrong_method_too(app):
+    admin, anon = login(app, ADMIN), login(app, None)
+    assert anon.get('/run/python').status_code == 405  # POST-only route of an enabled feature
+    _put(admin, {'code-runner': False})
+    assert anon.get('/run/python').status_code == 404  # no 405 hint that the route exists
+
+
 def test_shared_blueprint_follows_either_feature(app):
     admin, anon = login(app, ADMIN), login(app, None)
     _put(admin, {'ai-chatbot': False})

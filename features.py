@@ -291,9 +291,26 @@ def register_blueprints(app):
                 done.append((fid, bp.name))
             _blueprint_features.setdefault(seen[ref], set()).add(fid)
 
+    def _blueprint_of_request():
+        if request.blueprint or request.url_rule is not None:
+            return request.blueprint
+        # Wrong HTTP method: no rule matched, but the path belongs to a blueprint. Find it,
+        # so a disabled feature answers 404 rather than revealing itself with a 405.
+        from werkzeug.exceptions import MethodNotAllowed
+        exc = request.routing_exception
+        if isinstance(exc, MethodNotAllowed):
+            adapter = app.create_url_adapter(request)
+            for method in exc.valid_methods or ():
+                try:
+                    endpoint, _ = adapter.match(method=method)
+                    return endpoint.rpartition('.')[0] or None
+                except Exception:
+                    continue
+        return None
+
     @app.before_request
     def _gate_disabled_features():
-        owners = _blueprint_features.get(request.blueprint)
+        owners = _blueprint_features.get(_blueprint_of_request())
         if owners and CORE not in owners and not owners.intersection(enabled_features()):
             abort(404)
     return done
