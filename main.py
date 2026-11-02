@@ -20,9 +20,11 @@ from model.user import User, Section, initUsers  # initUsers: used by scripts/db
 
 import os
 
-# Effective features = KIT preset -> FEATURES env -> admin overrides in the database
-# (PUT /api/kit/admin/features). Overrides are read per request, so no restart is needed.
+# Effective features = a kit applied by an admin (PUT /api/kit/admin/kit), else KIT and FEATURES,
+# then admin overrides (PUT /api/kit/admin/features). Both are read per request, so no restart
+# is needed.
 from model import feature_override
+features.set_kit_provider(feature_override.read_stored_kit)
 features.set_override_provider(feature_override.read_overrides)
 
 # API endpoints: every feature's blueprints are registered, and a request to a blueprint whose
@@ -31,7 +33,7 @@ features.set_override_provider(feature_override.read_overrides)
 _registered = features.register_blueprints(app)
 
 with app.app_context():
-    feature_override.ensure_tables()  # databases created before admin overrides existed
+    feature_override.ensure_tables()  # databases created before these tables existed
     print(f"** Kit: {features.kit_name()} | features: {', '.join(features.enabled_features())}")
     # Startup hooks of enabled features (e.g. the jokes file for 'examples')
     features.run_hooks('startup')

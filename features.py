@@ -4,7 +4,11 @@ kits/catalog.json is the single source of truth: it lists every feature, which F
 blueprints / models / seed functions belong to it, and which features each kit enables.
 main.py and scripts/db_init.py only iterate this registry; nothing here is per-feature.
 
-Which features are enabled (resolved once per process from the environment):
+Which features are enabled:
+
+  1. A kit applied by an admin at runtime (PUT /api/kit/admin/kit, stored in the database) wins:
+     its preset, then admin overrides. KIT and FEATURES are ignored while it is stored.
+  2. Otherwise the environment (resolved once per process), then admin overrides:
 
     KIT       starting preset: vanilla | education | business
               (unset = 'default': every feature on, as before kits existed)
@@ -120,14 +124,56 @@ def _state():
 
 
 def kit_name():
-    return _state()[0]
+    return _base_state()[0]
 
 
-# --- admin overrides (stored in the database, see model/feature_override.py) ----------------
-# Effective features = KIT preset -> FEATURES env -> admin overrides. This module stays free of
-# Flask/DB imports; main.py installs a provider that reads the feature_override table.
+# --- runtime state (stored in the database, see model/feature_override.py) ------------------
+# Effective features = stored kit preset -> admin overrides, or, with no stored kit,
+# KIT preset -> FEATURES env -> admin overrides. This module stays free of Flask/DB imports;
+# main.py installs providers that read the kit_setting and feature_override tables.
 
 _override_provider = None
+_kit_provider = None
+
+
+def set_kit_provider(fn):
+    """fn() -> stored kit id or None. Called on every check, so a switch needs no restart."""
+    global _kit_provider
+    _kit_provider = fn
+
+
+def stored_kit():
+    """The kit an admin applied at runtime, or None to follow KIT/FEATURES."""
+    if _kit_provider is None:
+        return None
+    try:
+        found = _kit_provider()
+    except Exception as e:  # a missing table or DB outage must not take the site down
+        print(f"features: cannot read the stored kit ({e}); using KIT/FEATURES")
+        return None
+    return found if found in load_catalog()['kits'] else None  # a kit removed from the catalog is ignored
+
+
+def _base_state():
+    """(kit_name, customized, enabled) before admin overrides."""
+    kit = stored_kit()
+    return resolve(kit) if kit else _state()
+
+
+def kit_source():
+    """Where the active kit comes from: 'admin' (stored) | 'env' | 'default'."""
+    if stored_kit():
+        return 'admin'
+    configured = (os.environ.get('KIT') or '').strip() or (os.environ.get('FEATURES') or '').strip()
+    return 'env' if configured else 'default'
+
+
+def _preset(name):
+    """Feature ids of a kit preset, core included; 'default' (KIT unset) is every feature."""
+    kits = load_catalog()['kits']
+    if name not in kits:
+        return set(feature_ids())
+    return set(_expand(kits[name]['features'], feature_ids(), f"kit '{name}'")) | {CORE}
 
 
 def set_override_provider(fn):
@@ -158,13 +204,13 @@ def apply_overrides(base_enabled, override_map):
 
 
 def base_features():
-    """Enabled by KIT + FEATURES only (what the server operator configured)."""
-    return list(_state()[2])
+    """Enabled before admin overrides: the stored kit's preset, or KIT + FEATURES."""
+    return list(_base_state()[2])
 
 
 def enabled_features():
     """Effective enabled features, admin overrides included."""
-    return apply_overrides(_state()[2], overrides())
+    return apply_overrides(_base_state()[2], overrides())
 
 
 def is_enabled(fid):
@@ -174,18 +220,14 @@ def is_enabled(fid):
 
 
 def source(fid, override_map=None):
-    """Who decided this feature's state: 'admin' (override), 'env' (FEATURES) or 'kit'."""
+    """Who decided this feature's state: 'admin' (override), 'env' (FEATURES) or 'kit'.
+    Under a stored kit the environment is ignored, so it is never 'env'."""
     override_map = overrides() if override_map is None else override_map
     if fid in override_map:
         return 'admin'
-    name, _, base = _state()
-    if (os.environ.get('FEATURES') or '').strip():
-        if name == 'custom':
-            return 'env'
-        kit = os.environ.get('KIT', '').strip().lower()
-        preset = set(_expand(load_catalog()['kits'][kit]['features'], feature_ids(), 'kit')) | {CORE} \
-            if kit else set(feature_ids())
-        if (fid in preset) != (fid in base):
+    if not stored_kit() and (os.environ.get('FEATURES') or '').strip():
+        name, _, base = _state()
+        if name == 'custom' or (fid in _preset(name)) != (fid in base):
             return 'env'
     return 'kit'
 
@@ -193,9 +235,8 @@ def source(fid, override_map=None):
 def kit_info():
     """Public summary served by GET /api/kit (shared contract with the Spring backend)."""
     import roles  # roles imports this module
-    name, customized, _ = _state()
-    override_map = overrides()
-    enabled = apply_overrides(_state()[2], override_map)
+    name, _, base = _base_state()
+    enabled = apply_overrides(base, overrides())
     catalog = load_catalog()
     kit = catalog['kits'].get(name, {})
     default_names = {DEFAULT_KIT: catalog['flask']['default_kit']['name'], 'custom': 'Custom'}
@@ -204,7 +245,10 @@ def kit_info():
         'kit': name,
         'kit_name': kit_label,
         'name': kit_label,  # same as kit_name; kept for older clients
-        'customized': customized or bool(override_map),
+        'kit_source': kit_source(),
+        # True when FEATURES or overrides make the result differ from the preset; an override
+        # that agrees with the preset changes nothing. An explicit FEATURES list has no preset.
+        'customized': set(enabled) != (set(base) if name == 'custom' else _preset(name)),
         'features': enabled,  # ids of enabled features
         'feature_details': [
             {'id': fid,
@@ -253,6 +297,13 @@ def admin_info(config=None):
         })
     info['base_features'] = base_features()
     info['feature_management'] = catalog.get('feature_management', {})
+    info['presets'] = {
+        kid: {'name': kit['name'],
+              'description': kit.get('description'),
+              'features': list(kit['features']),
+              'roles': {rid: {'label': r['label']} for rid, r in kit['roles'].items()}}
+        for kid, kit in catalog['kits'].items()
+    }
     return info
 
 
@@ -483,7 +534,8 @@ def print_list():
     if name:
         print(f"\nKIT={os.environ.get('KIT') or '(unset)'} FEATURES={os.environ.get('FEATURES') or '(unset)'}"
               f" -> kit '{name}'{' (customized)' if customized else ''}, {len(enabled)} features enabled")
-        print("Admins can change this at runtime (PUT /api/kit/admin/features); see GET /api/kit/admin.")
+        print("Admins can change this at runtime (PUT /api/kit/admin/kit and /api/kit/admin/features), and a")
+        print("kit they apply replaces KIT and FEATURES; GET /api/kit shows what is really active.")
 
 
 def main(argv=None):

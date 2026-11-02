@@ -5,8 +5,9 @@ Every kit has the same three canonical roles, which the other OCS-Kit backends s
     staff   day-to-day work: content, groups, grading, approvals
     member  regular user; the role new sign-ups get (the kit's signup_role)
 Each one is stored in users._role under a fixed Flask name (catalog 'flask.roles', e.g.
-staff -> 'Teacher'), so changing KIT never rewrites existing accounts. Only the labels shown
-to people ('Teacher' / 'Manager' / 'Editor') and the default seed account uids differ per kit.
+staff -> 'Teacher'), so changing the kit never rewrites existing accounts, whether through KIT
+or an admin applying a kit at runtime. Only the labels shown to people ('Teacher' / 'Manager' /
+'Editor') and the default seed account uids differ per kit.
 """
 import os
 
@@ -20,8 +21,9 @@ def _catalog():
 
 
 def kit_config():
-    """The KIT preset's roles/signup_role, or flask.default_kit when KIT is unset."""
-    kit = (os.environ.get('KIT') or '').strip().lower()
+    """The active kit's roles/signup_role: the kit an admin applied, else KIT, else
+    flask.default_kit. Read on every call, so labels follow a kit switch immediately."""
+    kit = features.stored_kit() or (os.environ.get('KIT') or '').strip().lower()
     if kit:
         return _catalog()['kits'][kit]  # an unknown KIT already failed in features.resolve()
     return _catalog()['flask']['default_kit']
