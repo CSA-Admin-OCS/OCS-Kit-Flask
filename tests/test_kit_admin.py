@@ -89,7 +89,8 @@ def test_apply_overrides_is_pure_and_keeps_core():
 
 
 @pytest.mark.parametrize('body', [{'features': {'nope': True}}, {'features': {'core': False}},
-                                  {'features': {'examples': 'yes'}}, {'features': {}}, {}])
+                                  {'features': {'examples': 'yes'}}, {'features': {}}, {},
+                                  ['examples'], 'examples', 3])
 def test_bad_requests_are_rejected(app, body):
     admin = login(app, ADMIN)
     assert admin.put('/api/kit/admin/features', json=body).status_code == 400

@@ -56,9 +56,10 @@ def get_kit_admin():
 @kit_api.route('/kit/admin/features', methods=['PUT'])
 @token_required(roles.admin_role())
 def put_kit_features():
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
     try:
-        feature_override.set_overrides(body.get('features'), g.current_user.uid)
+        feature_override.set_overrides(body.get('features') if isinstance(body, dict) else None,
+                                       g.current_user.uid)
     except ValueError as e:
         return jsonify({'message': str(e)}), 400
     return jsonify(_admin_payload())
