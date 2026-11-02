@@ -5,6 +5,8 @@ KIT preset -> FEATURES env -> these overrides (see features.py).
 Only the admin role may change them (GET/PUT/DELETE /api/kit/admin...). Changes apply on the
 next request in every worker, without a restart: features.py reads these tables on each check.
 A kit switch only changes this state: accounts and feature data are never touched.
+While the state cannot be read, features.py keeps only always-on features on and every write
+here raises features.FeatureStateUnavailable, so nothing appears to succeed.
 """
 from datetime import datetime, timezone
 
@@ -61,29 +63,56 @@ def ensure_tables():
             print(f"feature_override: {model.__tablename__}: {e}")
 
 
-def read_overrides():
-    """{feature_id: enabled}; cached per request in flask.g."""
+def _read_rows(table, stmt):
+    """Rows of a stored-state table, on a connection of its own: a failure cannot poison the
+    caller's session, and pending changes in that session are not flushed by a read.
+    A table that does not exist holds nothing (a first boot, or a database from before it);
+    any other failure means the answer is unknown, so it is raised."""
+    try:
+        with db.engine.connect() as conn:
+            return conn.execute(stmt).all()
+    except Exception:
+        if not inspect(db.engine).has_table(table):
+            return []
+        raise
+
+
+def _per_request(key, read):
+    """read() at most once per request, failures included, so one request sees one answer
+    and a database outage is not waited on at every check."""
     from flask import g, has_request_context
-    if has_request_context() and '_feature_overrides' in g:
-        return g._feature_overrides
-    found = {o.feature_id: o.enabled for o in FeatureOverride.query.all()}
-    if has_request_context():
-        g._feature_overrides = found
-    return found
+    if not has_request_context():
+        return read()
+    if key not in g:
+        try:
+            setattr(g, key, (read(), None))
+        except Exception as e:
+            setattr(g, key, (None, e))
+    value, failure = g.get(key)
+    if failure is not None:
+        raise failure
+    return value
+
+
+def read_overrides():
+    """{feature_id: enabled}."""
+    from flask import has_app_context
+    if not has_app_context():  # e.g. while modules are imported; there is no database to ask yet
+        return {}
+    return _per_request('_feature_overrides', lambda: dict(_read_rows(
+        FeatureOverride.__tablename__, db.select(FeatureOverride.feature_id, FeatureOverride.enabled))))
 
 
 def read_stored_kit():
-    """The stored kit id or None; cached per request in flask.g."""
-    from flask import g, has_app_context, has_request_context
-    if not has_app_context():  # e.g. while modules are imported; there is no database to ask yet
+    """The stored kit id or None."""
+    from flask import has_app_context
+    if not has_app_context():
         return None
-    if has_request_context() and '_stored_kit' in g:
-        return g._stored_kit
-    with db.session.no_autoflush:  # may run while the caller builds a new User
-        found = db.session.execute(db.select(KitSetting.kit).where(KitSetting.id == KIT_ROW_ID)).scalar()
-    if has_request_context():
-        g._stored_kit = found
-    return found
+
+    def read():
+        rows = _read_rows(KitSetting.__tablename__, db.select(KitSetting.kit).where(KitSetting.id == KIT_ROW_ID))
+        return rows[0][0] if rows else None
+    return _per_request('_stored_kit', read)
 
 
 def _forget_cache():
@@ -94,7 +123,17 @@ def _forget_cache():
 
 
 def recent_changes(limit=20):
-    return [a.read() for a in FeatureAudit.query.order_by(FeatureAudit.id.desc()).limit(limit)]
+    try:
+        return [a.read() for a in FeatureAudit.query.order_by(FeatureAudit.id.desc()).limit(limit)]
+    except Exception as e:  # the admin page must still load and report what is wrong
+        db.session.rollback()
+        app.logger.error(f"features: cannot read the feature audit log: {e!r}")
+        return []
+
+
+def _require_readable_state():
+    if features.degraded():
+        raise features.FeatureStateUnavailable(features.degraded_reason())
 
 
 def _feature_tables_empty(fid):
@@ -136,6 +175,7 @@ def set_overrides(changes, actor):
             raise ValueError(f"'{fid}' must be true or false")
         if fid == features.CORE and not on:
             raise ValueError("'core' is always on and cannot be disabled")
+    _require_readable_state()
     before = set(features.enabled_features())
     now = datetime.now(timezone.utc)
     for fid, on in changes.items():
@@ -155,6 +195,7 @@ def clear_override(fid, actor):
     """Drop the admin override so the kit decides again. Returns False if there was none."""
     if fid not in features.feature_ids():
         raise ValueError(f"Unknown feature id '{fid}'")
+    _require_readable_state()
     row = db.session.get(FeatureOverride, fid)
     if row is None:
         return False
@@ -180,6 +221,7 @@ def apply_kit(kit, actor):
     kits = features.load_catalog()['kits']
     if not isinstance(kit, str) or kit not in kits:
         raise ValueError(f"Unknown kit {kit!r}. Valid kits: {', '.join(kits)}")
+    _require_readable_state()
     before = set(features.enabled_features())
     now = datetime.now(timezone.utc)
     _clear_all_overrides(actor, now)
@@ -197,6 +239,7 @@ def apply_kit(kit, actor):
 
 def forget_kit(actor):
     """Forget the stored kit and every override: KIT/FEATURES decide again."""
+    _require_readable_state()
     before = set(features.enabled_features())
     now = datetime.now(timezone.utc)
     _clear_all_overrides(actor, now)

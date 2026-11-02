@@ -8,7 +8,10 @@ Which features are enabled:
 
   1. A kit applied by an admin at runtime (PUT /api/kit/admin/kit, stored in the database) wins:
      its preset, then admin overrides. KIT and FEATURES are ignored while it is stored.
-  2. Otherwise the environment (resolved once per process), then admin overrides:
+  2. Otherwise the environment (resolved once per process), then admin overrides.
+  3. If that stored state cannot be read, only always-on features are on until it can (see
+     _runtime()): falling back to the environment would bring back what an admin disabled.
+
 
     KIT       starting preset: vanilla | education | business
               (unset = 'default': every feature on, as before kits existed)
@@ -24,6 +27,7 @@ CLI (run from the repo root):
 """
 import importlib
 import json
+import logging
 import os
 import sys
 
@@ -37,8 +41,15 @@ FLASK_KEYS = ('blueprints', 'uses_blueprints', 'inactive_blueprints', 'models', 
               'admin_links')
 
 
+log = logging.getLogger(__name__)
+
+
 class FeatureConfigError(ValueError):
     """Bad KIT / FEATURES value or a malformed catalog."""
+
+
+class FeatureStateUnavailable(RuntimeError):
+    """The stored kit and overrides cannot be read, so they must not be changed either."""
 
 
 _catalog = None
@@ -131,10 +142,53 @@ def kit_name():
 # --- runtime state (stored in the database, see model/feature_override.py) ------------------
 # Effective features = stored kit preset -> admin overrides, or, with no stored kit,
 # KIT preset -> FEATURES env -> admin overrides. This module stays free of Flask/DB imports;
-# main.py installs providers that read the kit_setting and feature_override tables.
+# main.py installs providers that read the kit_setting and feature_override tables. A provider
+# returns "nothing stored" when that is true, including when its table does not exist yet, and
+# raises only when the answer is unknown.
 
 _override_provider = None
 _kit_provider = None
+_read_failure_logged = False
+
+
+def _runtime():
+    """(stored kit or None, overrides, read error or None), asked anew on every check so the
+    site recovers by itself. The error is logged once per outage, and only its type is exposed."""
+    global _read_failure_logged
+    try:
+        kit = _kit_provider() if _kit_provider else None
+        found = (_override_provider() if _override_provider else None) or {}
+    except Exception as e:
+        if not _read_failure_logged:
+            _read_failure_logged = True
+            log.error("features: cannot read the stored kit and overrides; only always-on features are on: %r", e)
+        return None, {}, e
+    if _read_failure_logged:
+        _read_failure_logged = False
+        log.warning("features: the stored kit and overrides can be read again")
+    ids = feature_ids()
+    return (kit if kit in load_catalog()['kits'] else None,  # a kit removed from the catalog is ignored
+            {fid: bool(on) for fid, on in found.items() if fid in ids},  # so are removed features
+            None)
+
+
+def degraded():
+    """True while the stored kit and overrides cannot be read."""
+    return _runtime()[2] is not None
+
+
+def degraded_reason():
+    """Why, for admins and the logs' reader; None when not degraded. Never the error text,
+    which can hold SQL or database hosts."""
+    failure = _runtime()[2]
+    if failure is None:
+        return None
+    return (f"The stored kit and feature overrides cannot be read ({type(failure).__name__}). "
+            "Only always-on features are on, and changes are refused, until the database recovers.")
+
+
+def always_on_features():
+    return [fid for fid, f in load_catalog()['features'].items() if fid == CORE or f.get('always_on')]
 
 
 def set_kit_provider(fn):
@@ -144,15 +198,9 @@ def set_kit_provider(fn):
 
 
 def stored_kit():
-    """The kit an admin applied at runtime, or None to follow KIT/FEATURES."""
-    if _kit_provider is None:
-        return None
-    try:
-        found = _kit_provider()
-    except Exception as e:  # a missing table or DB outage must not take the site down
-        print(f"features: cannot read the stored kit ({e}); using KIT/FEATURES")
-        return None
-    return found if found in load_catalog()['kits'] else None  # a kit removed from the catalog is ignored
+    """The kit an admin applied at runtime, or None to follow KIT/FEATURES (and when it cannot
+    be read: callers that gate features use enabled_features(), which goes to always-on only)."""
+    return _runtime()[0]
 
 
 def _base_state():
@@ -184,15 +232,7 @@ def set_override_provider(fn):
 
 
 def overrides():
-    if _override_provider is None:
-        return {}
-    try:
-        found = _override_provider() or {}
-    except Exception as e:  # a missing table or DB outage must not take the site down
-        print(f"features: cannot read admin overrides ({e}); using KIT/FEATURES only")
-        return {}
-    ids = feature_ids()
-    return {fid: bool(on) for fid, on in found.items() if fid in ids}  # ids removed from the catalog are ignored
+    return _runtime()[1]
 
 
 def apply_overrides(base_enabled, override_map):
@@ -206,12 +246,15 @@ def apply_overrides(base_enabled, override_map):
 
 def base_features():
     """Enabled before admin overrides: the stored kit's preset, or KIT + FEATURES."""
-    return list(_base_state()[2])
+    return always_on_features() if degraded() else list(_base_state()[2])
 
 
 def enabled_features():
-    """Effective enabled features, admin overrides included."""
-    return apply_overrides(_base_state()[2], overrides())
+    """Effective enabled features, admin overrides included; always-on only when degraded."""
+    kit, override_map, failure = _runtime()
+    if failure is not None:
+        return always_on_features()
+    return apply_overrides((resolve(kit) if kit else _state())[2], override_map)
 
 
 def is_enabled(fid):
@@ -223,10 +266,11 @@ def is_enabled(fid):
 def source(fid, override_map=None):
     """Who decided this feature's state: 'admin' (override), 'env' (FEATURES) or 'kit'.
     Under a stored kit the environment is ignored, so it is never 'env'."""
-    override_map = overrides() if override_map is None else override_map
+    kit, stored_overrides, failure = _runtime()
+    override_map = stored_overrides if override_map is None else override_map
     if fid in override_map:
         return 'admin'
-    if not stored_kit() and (os.environ.get('FEATURES') or '').strip():
+    if not kit and failure is None and (os.environ.get('FEATURES') or '').strip():
         name, _, base = _state()
         if name == 'custom' or (fid in _preset(name)) != (fid in base):
             return 'env'
@@ -237,7 +281,8 @@ def kit_info():
     """Public summary served by GET /api/kit (shared contract with the Spring backend)."""
     import roles  # roles imports this module
     name, _, base = _base_state()
-    enabled = apply_overrides(base, overrides())
+    enabled = enabled_features()
+    is_degraded = degraded()
     catalog = load_catalog()
     kit = catalog['kits'].get(name, {})
     default_names = {DEFAULT_KIT: catalog['flask']['default_kit']['name'], 'custom': 'Custom'}
@@ -249,7 +294,8 @@ def kit_info():
         'kit_source': kit_source(),
         # True when FEATURES or overrides make the result differ from the preset; an override
         # that agrees with the preset changes nothing. An explicit FEATURES list has no preset.
-        'customized': set(enabled) != (set(base) if name == 'custom' else _preset(name)),
+        'customized': not is_degraded and set(enabled) != (set(base) if name == 'custom' else _preset(name)),
+        'degraded': is_degraded,  # the reason is only in the admin payload
         'features': enabled,  # ids of enabled features
         'feature_details': [
             {'id': fid,
@@ -298,6 +344,7 @@ def admin_info(config=None):
         })
     info['base_features'] = base_features()
     info['feature_management'] = catalog.get('feature_management', {})
+    info['degraded_reason'] = degraded_reason()
     info['presets'] = {
         kid: {'name': kit['name'],
               'description': kit.get('description'),

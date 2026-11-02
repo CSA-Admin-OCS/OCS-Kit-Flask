@@ -576,6 +576,199 @@ def test_navbar_links_follow_the_kit(app):
     assert 'Personas' not in admin.get('/users/table2').get_data(as_text=True)
 
 
+# --- the stored state cannot be read ----------------------------------------------------------
+
+@pytest.fixture
+def broken_state(app):
+    """While on, reading (and writing) the stored kit and overrides fails as in a DB outage,
+    with the tables present. Other tables, such as users, keep working."""
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+    from __init__ import db
+
+    class Switch:
+        tables = ('kit_setting', 'feature_override', 'feature_audit')
+        verbs = ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+        on = False
+
+    def fail(conn, cursor, statement, parameters, context, executemany):
+        if Switch.on and statement.lstrip().startswith(Switch.verbs) and any(t in statement for t in Switch.tables):
+            raise OperationalError(statement, parameters, Exception('secret-db-host: connection lost'))
+    with app.app_context():
+        engine = db.engine
+    event.listen(engine, 'before_cursor_execute', fail)
+    yield Switch
+    Switch.on = False
+    event.remove(engine, 'before_cursor_execute', fail)
+
+
+def test_read_failure_leaves_only_always_on_features(app, broken_state):
+    admin, anon = login(app, ADMIN), login(app, None)
+    _switch(admin, 'business')
+    _override(admin, {'examples': True})
+    assert anon.get('/api/jokes').status_code == 200
+
+    broken_state.on = True
+    k = anon.get('/api/kit').get_json()
+    assert k['features'] == ['core'] and k['degraded'] is True and k['customized'] is False
+    assert {d['id'] for d in k['feature_details'] if d['enabled']} == {'core'}
+    assert 'degraded_reason' not in k
+
+    for url in list(PROBES.values()) + ['/api/gemini/health']:
+        assert admin.get(url).status_code == 404, url
+    assert anon.get('/api/section').status_code != 404  # core still answers
+
+
+def test_read_failure_does_not_bring_back_what_an_admin_disabled(app, broken_state):
+    admin, anon = login(app, ADMIN), login(app, None)
+    _override(admin, {'examples': False})  # on in the environment, off by this override
+    assert anon.get('/api/jokes').status_code == 404
+    broken_state.on = True
+    assert anon.get('/api/jokes').status_code == 404
+
+
+def test_failure_reading_only_the_overrides_is_degraded_too(app, broken_state):
+    broken_state.tables = ('feature_override',)
+    broken_state.on = True
+    try:
+        assert _public(app)['features'] == ['core'] and _public(app)['degraded'] is True
+    finally:
+        broken_state.tables = ('kit_setting', 'feature_override', 'feature_audit')
+
+
+def test_admin_payload_explains_without_leaking_the_error(app, broken_state):
+    admin = login(app, ADMIN)
+    broken_state.on = True
+    r = admin.get('/api/kit/admin')
+    assert r.status_code == 200
+    info = r.get_json()
+    assert info['degraded'] is True and 'OperationalError' in info['degraded_reason']
+    assert 'secret-db-host' not in r.get_data(as_text=True)
+    assert 'SELECT' not in info['degraded_reason']
+    assert info['features'] == ['core'] and info['base_features'] == ['core']
+    assert all(d['override'] is None and d['source'] == 'kit' for d in info['feature_details'])
+    assert info['recent_changes'] == []
+    assert set(info['presets']) == set(KITS)  # read from the catalog, not the database
+
+
+@pytest.mark.parametrize('method,url,body', [
+    ('PUT', URL, {'kit': 'business'}),
+    ('DELETE', URL, None),
+    ('PUT', '/api/kit/admin/features', {'features': {'examples': False}}),
+    ('DELETE', '/api/kit/admin/features/examples', None),
+])
+def test_writes_are_refused_while_degraded(app, broken_state, method, url, body):
+    from model.feature_override import FeatureOverride, KitSetting
+    admin = login(app, ADMIN)
+    _switch(admin, 'vanilla')
+    _override(admin, {'examples': True})
+    broken_state.on = True
+    r = admin.open(url, method=method, json=body)
+    assert r.status_code == 503 and 'message' in r.get_json()
+    assert 'secret-db-host' not in r.get_data(as_text=True)
+    broken_state.on = False
+    with app.app_context():
+        assert KitSetting.query.one().kit == 'vanilla'
+        assert FeatureOverride.query.filter_by(feature_id='examples').one().enabled is True
+
+
+def test_bad_requests_stay_400_while_degraded(app, broken_state):
+    admin = login(app, ADMIN)
+    broken_state.on = True
+    assert admin.put(URL, json={'kit': 'nope'}).status_code == 400
+
+
+def test_failing_write_is_an_error_and_keeps_the_old_state(app, broken_state):
+    admin = login(app, ADMIN)
+    _switch(admin, 'vanilla')
+    broken_state.verbs = ('INSERT', 'UPDATE', 'DELETE')  # reads work, so not degraded
+    broken_state.on = True
+    try:
+        r = admin.put(URL, json={'kit': 'business'})
+        assert r.status_code == 503 and 'secret-db-host' not in r.get_data(as_text=True)
+    finally:
+        broken_state.on = False
+        broken_state.verbs = ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    assert _public(app)['kit'] == 'vanilla' and _public(app)['degraded'] is False
+
+
+def test_recovery_restores_the_stored_state_on_the_next_check(app, broken_state):
+    admin, anon = login(app, ADMIN), login(app, None)
+    _switch(admin, 'business')
+    info = _override(admin, {'examples': True, 'social': False})
+    broken_state.on = True
+    assert anon.get('/api/kit').get_json()['degraded'] is True
+    broken_state.on = False
+    k = anon.get('/api/kit').get_json()
+    assert k['degraded'] is False and k['kit'] == 'business' and k['kit_source'] == 'admin'
+    assert k['features'] == info['features'] and k['customized'] is True
+    assert anon.get('/api/jokes').status_code == 200 and anon.get('/api/microblog').status_code == 404
+    full = admin.get('/api/kit/admin').get_json()
+    assert full['degraded'] is False and full['degraded_reason'] is None
+    assert _detail(full, 'examples')['source'] == 'admin'
+    assert full['recent_changes']
+
+
+def test_read_failure_is_logged_once_per_outage(app, broken_state, caplog):
+    anon = login(app, None)
+    def errors():
+        return [r for r in caplog.records if r.levelname == 'ERROR' and 'cannot read the stored kit' in r.getMessage()]
+    broken_state.on = True
+    anon.get('/api/kit')
+    anon.get('/api/kit')
+    assert len(errors()) == 1
+    broken_state.on = False
+    anon.get('/api/kit')
+    broken_state.on = True
+    anon.get('/api/kit')
+    assert len(errors()) == 2  # a new outage is reported again
+    broken_state.on = False
+    anon.get('/api/kit')
+
+
+def test_one_request_reads_the_failing_state_only_once(app, broken_state, monkeypatch):
+    from sqlalchemy import event
+    from __init__ import db
+    seen = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        if 'kit_setting' in statement:
+            seen.append(statement)
+    with app.app_context():
+        engine = db.engine
+    event.listen(engine, 'before_cursor_execute', count, insert=True)
+    try:
+        broken_state.on = True
+        login(app, None).get('/api/kit')
+    finally:
+        event.remove(engine, 'before_cursor_execute', count)
+    assert len(seen) == 1
+
+
+def test_empty_stored_state_uses_env_and_is_not_degraded(app):
+    k = _public(app)  # the fixtures leave these tables present and empty
+    assert k['degraded'] is False and k['kit'] == 'education' and k['kit_source'] == 'env'
+    assert 'lessons' in k['features']
+    assert login(app, ADMIN).get('/api/kit/admin').get_json()['degraded_reason'] is None
+
+
+def test_missing_tables_use_env_and_are_not_degraded(app):
+    from __init__ import db
+    from model import feature_override
+    from model.feature_override import FeatureOverride, KitSetting
+    with app.app_context():
+        KitSetting.__table__.drop(db.engine)
+        FeatureOverride.__table__.drop(db.engine)
+    try:
+        k = _public(app)
+        assert k['degraded'] is False and k['kit'] == 'education' and k['kit_source'] == 'env'
+        assert 'lessons' in k['features']
+    finally:
+        with app.app_context():
+            feature_override.ensure_tables()
+    assert _public(app)['degraded'] is False
+
+
 # --- separate processes: what a real restart and a second worker see --------------------------
 
 def _run(tmp_path, kit, script):

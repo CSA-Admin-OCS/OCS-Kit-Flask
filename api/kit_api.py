@@ -10,15 +10,30 @@ DELETE /api/kit/admin/kit               admin: forgets the stored kit and overri
 A kit switch never changes accounts or data: only labels and which features answer.
 Only the admin role may change features (catalog 'feature_management'); staff and members
 get 403, anonymous callers 401. Setting values are never returned, only whether each is set.
+A change that cannot be saved, or made while the stored state is unreadable, answers 503.
 """
 from flask import Blueprint, current_app, g, jsonify, request
+from sqlalchemy.exc import SQLAlchemyError
 
 import features
 import roles
+from __init__ import db
 from api.authorize import token_required
 from model import feature_override
 
 kit_api = Blueprint('kit_api', __name__, url_prefix='/api')
+
+
+@kit_api.errorhandler(features.FeatureStateUnavailable)
+def _state_unavailable(e):
+    return jsonify({'message': str(e)}), 503
+
+
+@kit_api.errorhandler(SQLAlchemyError)
+def _not_saved(e):
+    db.session.rollback()
+    current_app.logger.error(f"features: a change could not be saved: {e!r}")
+    return jsonify({'message': 'The change could not be saved. Try again when the database recovers.'}), 503
 
 
 def _admin_payload():
