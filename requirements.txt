@@ -26,9 +26,3 @@ cryptography==50.0.2
 # ---------------------------------------------------------
 pypdf==6.20.1
 python-docx==1.2.0
-
-# ---------------------------------------------------------
-# Feature: grade prediction (model/grade_model.py, api/grade_api.py; currently disabled in main.py)
-# ---------------------------------------------------------
-pandas==2.3.3
-scikit-learn==1.9.1

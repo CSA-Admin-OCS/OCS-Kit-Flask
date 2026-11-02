@@ -48,5 +48,6 @@ def handle_get_leaderboard():
 
 # this runs the flask application on the development server
 if __name__ == "__main__":
-    # change name for testing
-    socketio.run(app, debug=True, host="0.0.0.0", port=8500)
+    # debug enables the Werkzeug debugger and reloader: never on in the image (see Dockerfile)
+    debug = os.environ.get("SOCKET_DEBUG", "false").lower() == "true"
+    socketio.run(app, debug=debug, host="0.0.0.0", port=8500)

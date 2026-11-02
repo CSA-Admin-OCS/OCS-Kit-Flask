@@ -1,0 +1,5 @@
+# Optional: grade prediction (model/grade_model.py, api/grade_api.py), currently disabled in
+# main.py and so not installed in the image. Install these too before enabling it:
+#   pip install -r requirements.txt -r requirements-grade.txt
+pandas==2.3.3
+scikit-learn==1.9.1

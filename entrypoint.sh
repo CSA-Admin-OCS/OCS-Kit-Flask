@@ -23,7 +23,13 @@ if [ -z "$SECRET_KEY" ]; then
 fi
 
 DB_FILE="instance/volumes/user_management.db"
-mkdir -p instance/volumes
+mkdir -p instance/volumes instance/uploads instance/data
+
+# A fresh bind mount hides the default profile picture baked into the image.
+if [ ! -e instance/uploads/default/default.png ] && [ -d defaults/uploads/default ]; then
+    mkdir -p instance/uploads/default
+    cp defaults/uploads/default/* instance/uploads/default/
+fi
 
 if [ "$DB_INIT" = "true" ] || { [ -z "$DB_ENDPOINT" ] && [ ! -f "$DB_FILE" ]; }; then
     echo "Initializing database..."

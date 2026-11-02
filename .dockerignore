@@ -1,40 +1,60 @@
+# Patterns without **/ match only at the context root, so recursive ones are spelled out.
+
 # VCS and editor
-.git
-.gitignore
+**/.git
+**/.gitignore
+**/.gitattributes
 .github
 .vscode
 .devcontainer
-.DS_Store
+**/.DS_Store
 
 # Secrets / local config
-.env
-.env.*
-!.env.example
-cookies.txt
+**/.env
+**/.env.*
+**/cookies.txt
+**/*.pem
+**/*.key
+**/CREDENTIALS*
 
 # Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
 venv/
 .venv/
 env/
 
 # Runtime data (mounted as a volume, never baked into the image)
-instance/volumes/*
-!instance/volumes/README.md
-instance/backup/
-instance/backups/
-instance/data/
+instance/volumes
+instance/backup
+instance/backups
+instance/data
+instance/data.json*
 instance/uploads/*
 !instance/uploads/default/
-*.db
-*.sqlite
-*.sqlite3
-*.log
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
+**/*.log
 
-# Not needed in the image
+# Other images have their own build contexts
+runner/
+socket/
+
+# Not needed at runtime
+tests/
+datasets/
 deploy/
+scripts/venv.sh
+Dockerfile
+.dockerignore
 docker-compose*.yml
-README.md
+requirements-grade.txt
+*.md
+LICENSE
+check_status.sh
+run_backend.sh
+setup_and_run.sh

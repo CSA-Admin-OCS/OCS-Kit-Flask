@@ -1,26 +1,26 @@
-FROM python:3.12-slim
+# Runs untrusted student code (Python and JavaScript), standard library only.
+FROM python:3.12-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HOME=/tmp
 
 WORKDIR /app
 
-# Install Node.js
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends nodejs \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache nodejs && \
+    adduser -D -u 1000 -s /sbin/nologin runner
 
-# Install Python deps first for better layer caching
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
-# Copy service code
-COPY . /app
+COPY runner.py /app/runner.py
 
-# Create unprivileged user
-RUN useradd --create-home --shell /usr/sbin/nologin runner
-
-USER runner
+USER 1000:1000
 
 EXPOSE 8591
 
-# Run Flask with Gunicorn
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8591), 3).close()"]
+
 CMD ["gunicorn", "--bind", "0.0.0.0:8591", "--workers", "2", "runner:runner"]

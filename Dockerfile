@@ -1,44 +1,41 @@
-# Use official Python image as base image
+# OCS Kit Flask backend. Runtime needs Python only: code execution goes to the code_runner
+# container (CODE_RUNNER=remote), and every requirement ships as a wheel, so there is no
+# nodejs, npm, git or compiler here.
 FROM python:3.12-slim
 
-# Set working directory
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /app
 
-# Install system dependencies and clean up apt cache
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    nodejs \
-    npm && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Dependencies first for layer caching
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
-# Copy application code into the container
 COPY . /app
 
-# Upgrade pip and install dependencies
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Code stays root-owned and read-only; only instance/ (data, usually a bind mount) is writable.
+# defaults/ keeps files that a bind mount over instance/ would otherwise hide (see entrypoint.sh).
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin appuser && \
+    sed -i 's/\r$//' entrypoint.sh && \
+    mkdir -p defaults instance/volumes instance/uploads instance/data && \
+    cp -r instance/uploads defaults/uploads && \
+    chmod -R a+rX,go-w /app && \
+    chmod 555 entrypoint.sh && \
+    chown -R appuser:appuser instance
 
-# Create non-privileged user and set file permissions
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app && \
-    chmod -R 755 /app && \
-    # Make code directories read-only for appuser (prevent code modification)
-    chmod -R 555 /app/model && \
-    chmod -R 555 /app/api && \
-    # Keep /app/instance writable for database and uploads
-    chmod -R 755 /app/instance && \
-    chmod 555 /app/entrypoint.sh
-
-# Switch to non-privileged user
-USER appuser
-
-# Set environment variables
 ENV FLASK_ENV=production \
+    HOME=/tmp \
+    CODE_RUNNER=remote \
     GUNICORN_CMD_ARGS="--workers=5 --threads=2 --bind=0.0.0.0:8587 --timeout=30 --access-logfile -"
 
-# Expose application port
+USER 1000:1000
+
 EXPOSE 8587
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8587/login', timeout=4)"]
 
 # Initialize the database on first boot, then start Gunicorn
 ENTRYPOINT ["/app/entrypoint.sh"]

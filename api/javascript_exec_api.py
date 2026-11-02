@@ -19,8 +19,11 @@ class JavaScriptExec(Resource):
             return {"output": "⚠️ No code provided."}, 400
 
         is_production = os.environ.get("IS_PRODUCTION", "false").lower() == "true"
+        # The images have no node and never execute code in the web container: they set
+        # CODE_RUNNER=remote, so even a local (IS_PRODUCTION=false) install uses code_runner.
+        use_runner = is_production or os.environ.get("CODE_RUNNER", "").lower() == "remote"
 
-        if is_production:
+        if use_runner:
             return _execute_remote(data)
         # might have to update this in future; could be vuln
         # skipping verbose check
