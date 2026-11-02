@@ -36,12 +36,11 @@ os.environ.update({
 
 @pytest.fixture(scope='session')
 def app():
-    from main import app as flask_app, db
-    import features
+    from main import app as flask_app, db, seed_data
     flask_app.config['TESTING'] = True
     with flask_app.app_context():
         db.create_all()
-        features.run_hooks("seed")
+        seed_data(accounts=True)
     yield flask_app
 
 

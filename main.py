@@ -196,9 +196,11 @@ def update_user(uid):
 # Create an AppGroup for custom commands
 custom_cli = AppGroup('custom', help='Custom commands')
 
-def seed_data():
-    """Seed functions of enabled features, in catalog order (core's initUsers first)."""
-    features.run_hooks('seed')
+def seed_data(accounts=False):
+    """Seed functions of enabled features, in catalog order (core's initUsers first).
+    accounts=True is for scripts/db_init.py: the demo accounts have known passwords, so they
+    are only ever created on a database with no users."""
+    features.run_initial_seed(accounts and User.query.first() is None)
 
 
 # flask custom generate_data

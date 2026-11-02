@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "OCS-Kit-Flask feature catalog: the ONLY place Flask code is assigned to features and kits. Everything except 'description' and the 'flask' blocks is copied verbatim from the canonical OCS-Kit/kits/catalog.json (checked by `python -m features --check`). Top-level 'flask' maps the canonical role ids (admin/staff/member) to this backend's stored role names, and gives the role labels/seed uids used when KIT is unset. Per feature, 'flask' lists: blueprints ('module:attribute' owned by the feature; requests return 404 while it is disabled), uses_blueprints (blueprints owned by another feature that this feature also needs; served when either is enabled), inactive_blueprints (owned but never registered), models (always imported so every table and foreign key exists in every kit), seed (run by scripts/db_init.py, and when an admin enables the feature while its tables are empty), startup (run at app start and on enable) and admin_links (navbar entries in the server-rendered admin pages).",
+  "description": "OCS-Kit-Flask feature catalog: the ONLY place Flask code is assigned to features and kits. Everything except 'description' and the 'flask' blocks is copied verbatim from the canonical OCS-Kit/kits/catalog.json (checked by `python -m features --check`). Top-level 'flask' maps the canonical role ids (admin/staff/member) to this backend's stored role names, and gives the role labels/seed uids used when KIT is unset. Per feature, 'flask' lists: blueprints ('module:attribute' owned by the feature; requests return 404 while it is disabled), uses_blueprints (blueprints owned by another feature that this feature also needs; served when either is enabled), inactive_blueprints (owned but never registered), models (always imported so every table and foreign key exists in every kit), seed (reference data with no accounts: run by scripts/db_init.py, and when an admin enables the feature while its tables are empty), seed_accounts (creates accounts with known passwords: run only by scripts/db_init.py on an empty database, never at runtime), startup (run at app start and on enable) and admin_links (navbar entries in the server-rendered admin pages).",
   "feature_management": {
     "allowed_roles": [
       "admin"
@@ -143,7 +143,8 @@
           "model.github",
           "model.feature_override"
         ],
-        "seed": [
+        "seed": [],
+        "seed_accounts": [
           "model.user:initUsers"
         ],
         "startup": [],
@@ -457,7 +458,9 @@
         ],
         "seed": [
           "model.microblog:initMicroblogs",
-          "model.persona:initPersonas",
+          "model.persona:initPersonas"
+        ],
+        "seed_accounts": [
           "model.persona:initPersonaUsers"
         ],
         "startup": [],

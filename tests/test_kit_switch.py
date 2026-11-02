@@ -424,7 +424,7 @@ def test_delete_seeds_what_the_environment_newly_enables(app, monkeypatch):
 def test_seeding_does_not_change_existing_accounts(app):
     from model.user import User
     admin = login(app, ADMIN)
-    _empty_social_tables(app)  # the persona accounts seeded earlier stay and must survive reseeding
+    _empty_social_tables(app)
     _switch(admin, 'vanilla')
     with app.app_context():
         before = {u.uid: (u.id, u.role, u._password) for u in User.query.all()}
@@ -432,6 +432,53 @@ def test_seeding_does_not_change_existing_accounts(app):
     with app.app_context():
         after = {u.uid: (u.id, u.role, u._password) for u in User.query.all()}
     assert {uid: after.get(uid) for uid in before} == before
+
+
+def _users(app):
+    from model.user import User
+    with app.app_context():
+        return {u.uid: (u.id, u.role, u._password) for u in User.query.all()}
+
+
+def test_no_runtime_path_creates_or_changes_accounts(app):
+    admin = login(app, ADMIN)
+    _empty_social_tables(app)  # so that every seed function really runs below
+    _switch(admin, 'vanilla')
+    before = _users(app)
+
+    for fid in features.feature_ids():  # per-feature toggle, one at a time
+        _override(admin, {fid: True})
+    admin.delete('/api/kit/admin/features/social')
+    _override(admin, {'social': False})
+    _empty_social_tables(app)
+    _override(admin, {'social': True})
+    assert _persona_count(app) > 0  # the seed did run
+    assert _users(app) == before
+
+    _empty_social_tables(app)
+    _switch(admin, 'vanilla')
+    _switch(admin, 'education')
+    assert _persona_count(app) > 0
+    _empty_social_tables(app)
+    _switch(admin, 'vanilla')
+    _switch(admin, 'business')
+    assert admin.delete(URL).status_code == 200
+    assert _users(app) == before
+
+
+def test_only_seed_accounts_hooks_create_accounts():
+    hooks = {ref for fid in features.feature_ids() for ref in features.flask_spec(fid)['seed']}
+    assert 'model.persona:initPersonas' in hooks
+    assert not hooks & {'model.user:initUsers', 'model.persona:initPersonaUsers'}
+
+
+def test_seed_data_creates_accounts_only_when_asked_and_only_on_an_empty_database(app):
+    from main import seed_data
+    before = _users(app)
+    with app.app_context():
+        seed_data()
+        seed_data(accounts=True)  # there are users already
+    assert _users(app) == before
 
 
 def test_failing_seed_does_not_hide_a_committed_switch(app, monkeypatch):
@@ -536,8 +583,7 @@ def _run(tmp_path, kit, script):
     header = textwrap.dedent(f"""\
         import json, sys
         sys.path.insert(0, {ROOT!r})
-        from main import app, db
-        import features
+        from main import app, db, seed_data
         def admin():
             c = app.test_client()
             assert c.post('/login', data={{'username': 'admin', 'password': {PASSWORD!r}}}).status_code == 302
@@ -555,7 +601,7 @@ def test_kit_survives_a_restart_and_upgrades_an_older_database(app, tmp_path):
         from model.feature_override import KitSetting
         with app.app_context():
             db.create_all()
-            features.run_hooks('seed')
+            seed_data(accounts=True)
             KitSetting.__table__.drop(db.engine)
         print('{}')
     """)

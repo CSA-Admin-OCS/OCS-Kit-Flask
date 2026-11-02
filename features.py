@@ -33,7 +33,8 @@ CATALOG_PATH = os.path.join(ROOT, 'kits', 'catalog.json')
 CANONICAL_PATH = os.environ.get('KIT_CANONICAL_CATALOG') or os.path.join(ROOT, '..', 'OCS-Kit', 'kits', 'catalog.json')
 CORE = 'core'
 DEFAULT_KIT = 'default'  # reported kit name when KIT is unset: every feature enabled
-FLASK_KEYS = ('blueprints', 'uses_blueprints', 'inactive_blueprints', 'models', 'seed', 'startup', 'admin_links')
+FLASK_KEYS = ('blueprints', 'uses_blueprints', 'inactive_blueprints', 'models', 'seed', 'seed_accounts', 'startup',
+              'admin_links')
 
 
 class FeatureConfigError(ValueError):
@@ -373,10 +374,19 @@ def features_of_blueprint(name):
 
 def run_hooks(kind, only=None):
     """Run 'seed' or 'startup' functions of enabled features (or of the ids in only),
-    in catalog order."""
+    in catalog order. Safe at runtime: these never create accounts ('seed_accounts' do)."""
     targets = enabled_features() if only is None else [f for f in feature_ids() if f in only]
     for fid in targets:
         for ref in flask_spec(fid)[kind]:
+            load_ref(ref)()
+
+
+def run_initial_seed(accounts):
+    """First-time data of the enabled features. accounts=True also creates accounts with known
+    passwords, so only scripts/db_init.py asks for it, and no runtime path reaches this."""
+    for fid in enabled_features():
+        spec = flask_spec(fid)
+        for ref in spec['seed'] + (spec['seed_accounts'] if accounts else []):
             load_ref(ref)()
 
 
@@ -458,7 +468,7 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
     blueprint_owner = {}
     for fid in all_ids:
         spec = flask_spec(fid, catalog)
-        for kind in ('blueprints', 'inactive_blueprints', 'models', 'seed', 'startup'):  # owned
+        for kind in ('blueprints', 'inactive_blueprints', 'models', 'seed', 'seed_accounts', 'startup'):  # owned
             for ref in spec[kind]:
                 try:
                     obj = load_ref(ref)
@@ -473,7 +483,7 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
                         problems.append(f"blueprint '{ref}' claimed by both '{owner[id(obj)]}' and '{fid}'")
                     owner[id(obj)] = fid
                     blueprint_owner[obj.name] = fid
-                elif kind in ('seed', 'startup') and not callable(obj):
+                elif kind in ('seed', 'seed_accounts', 'startup') and not callable(obj):
                     problems.append(f"feature '{fid}' {kind}: '{ref}' is not callable")
 
     # 3b. 'uses_blueprints' must point at a blueprint another feature owns
