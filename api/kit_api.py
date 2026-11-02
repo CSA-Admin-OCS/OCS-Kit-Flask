@@ -3,8 +3,11 @@
 GET    /api/kit                         public: kit, enabled features, role labels, signup role
 GET    /api/kit/admin                   admin: + per-feature source, setup guide, readiness
 PUT    /api/kit/admin/features          admin: {"features": {"<id>": true|false}} sets overrides
-DELETE /api/kit/admin/features/<id>     admin: clears an override (KIT/FEATURES decide again)
+DELETE /api/kit/admin/features/<id>     admin: clears an override (the kit decides again)
+PUT    /api/kit/admin/kit               admin: {"kit": "<id>"} applies a preset, clears all overrides
+DELETE /api/kit/admin/kit               admin: forgets the stored kit and overrides (back to env)
 
+A kit switch never changes accounts or data: only labels and which features answer.
 Only the admin role may change features (catalog 'feature_management'); staff and members
 get 403, anonymous callers 401. Setting values are never returned, only whether each is set.
 """
@@ -53,4 +56,22 @@ def delete_kit_feature_override(feature_id):
         feature_override.clear_override(feature_id, g.current_user.uid)
     except ValueError as e:
         return jsonify({'message': str(e)}), 400
+    return jsonify(_admin_payload())
+
+
+@kit_api.route('/kit/admin/kit', methods=['PUT'])
+@token_required(roles.admin_role())
+def put_kit():
+    body = request.get_json(silent=True)
+    try:
+        feature_override.apply_kit(body.get('kit') if isinstance(body, dict) else None, g.current_user.uid)
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    return jsonify(_admin_payload())
+
+
+@kit_api.route('/kit/admin/kit', methods=['DELETE'])
+@token_required(roles.admin_role())
+def delete_kit():
+    feature_override.forget_kit(g.current_user.uid)
     return jsonify(_admin_payload())
