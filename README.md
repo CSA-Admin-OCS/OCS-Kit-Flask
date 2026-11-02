@@ -61,7 +61,7 @@ Endpoints of disabled features return 404, and their admin-page links are hidden
 
 ### Roles
 
-Every kit has the same three roles: **admin** runs the site and is the only role that can change features, **staff** does day-to-day work (content, groups, grading, approvals), and **member** is a regular user and the role every sign-up gets. On accounts they are stored as `Admin`, `Teacher` and `User` (`flask.roles` in the catalog), whatever the kit, so changing `KIT` never rewrites accounts. Only the labels shown on pages and in `/api/kit` change, plus the default uids of the three seeded accounts. `ADMIN_*`, `TEACHER_*` (staff) and `USER_*` (member) in `.env` still override those uids, names and passwords.
+Every kit has the same three roles: **admin** runs the site and is the only role that can change features, **staff** does day-to-day work (content, groups, grading, approvals), and **member** is a regular user and the role every sign-up gets. On accounts they are stored as `Admin`, `Teacher` and `User` (`flask.roles` in the catalog), whatever the kit, so changing the kit never rewrites accounts. Only the labels shown on pages and in `/api/kit` change, plus the default uids of the three seeded accounts, which are picked once from `KIT` when the database is first created. `ADMIN_*`, `TEACHER_*` (staff) and `USER_*` (member) in `.env` still override those uids, names and passwords.
 
 | Who | Can do |
 |-----|--------|
@@ -71,7 +71,7 @@ Every kit has the same three roles: **admin** runs the site and is the only role
 
 ### Customizing features
 
-Features are decided in three layers, and each later layer wins:
+An admin can [apply a whole kit at runtime](#switching-kits-at-runtime), which replaces the first two layers below. Otherwise features are decided in three layers, and each later layer wins:
 
 1. **`KIT`** picks the preset.
 2. **`FEATURES`** in `.env` changes the preset. Restart after changing it.
@@ -82,11 +82,26 @@ Features are decided in three layers, and each later layer wins:
    FEATURES=ai-chatbot,social     # an explicit list replaces the kit (core is always added)
    FEATURES=*,-kasm               # every feature except Kasm
    ```
-3. **Admin overrides** apply at runtime with no restart, and only the admin role can set them. They are stored in the `feature_override` table, and every change is logged with who made it and when in `feature_audit`. `scripts/db_init.py` drops both tables.
+3. **Admin overrides** apply at runtime with no restart, and only the admin role can set them. They are stored in the `feature_override` table, and every change is logged with who made it and when in `feature_audit`. `scripts/db_init.py` drops both tables, and `kit_setting` too.
 
 `core` is always on and cannot be removed. An unknown kit or feature id in `.env` stops the app at startup with an error that lists the valid ids.
 
-Every feature's database tables are always created, whatever the kit, so turning a feature on never needs a migration. When an admin turns a feature on and its tables are empty, its seed data is created. A feature that was turned off and on again keeps its data.
+Every feature's database tables are always created, whatever the kit, so turning a feature on never needs a migration. When an admin turns a feature on and its tables are empty, its reference data (the catalog's `seed` hooks) is created. A feature that was turned off and on again keeps its data. Accounts are never created at runtime: hooks that create accounts with known passwords are listed under `seed_accounts`, and only `scripts/db_init.py` runs them, on a database with no users.
+
+### Switching kits at runtime
+
+An admin can turn a Vanilla site into Education or Business and back, then keep customizing, with no restart or rebuild:
+
+```bash
+curl -b jar -X PUT http://localhost:8587/api/kit/admin/kit -H 'Content-Type: application/json' -d '{"kit": "education"}'
+curl -b jar -X DELETE http://localhost:8587/api/kit/admin/kit   # back to KIT and FEATURES
+```
+
+- **Precedence.** With a stored kit: its preset, then admin overrides; `KIT` and `FEATURES` are ignored. Without one: `KIT`, then `FEATURES`, then admin overrides. `core` is always on.
+- **What a switch does.** It stores the kit in `kit_setting`, clears all overrides, logs who did it in `feature_audit`, and seeds newly enabled features whose tables are empty.
+- **What it never does.** Accounts and data are not deleted or changed: uids and stored roles stay, and logins stay valid. A disabled feature answers 404 and keeps its data, which is visible again when the feature comes back. Labels and the role of new sign-ups follow the active kit immediately.
+
+If the stored kit or overrides cannot be read (a database failure, not an empty or missing table), the site fails closed rather than falling back to `KIT`/`FEATURES`, which would bring back features an admin disabled. Only always-on features stay on, every check tries again so the site recovers by itself, the error is logged once per outage, and changes answer 503. `/api/kit` reports `degraded: true`, and `/api/kit/admin` adds `degraded_reason`. While degraded, `kit`, `kit_name` and `roles` come from the environment, because the stored kit is unknown.
 
 ### Kit API
 
@@ -94,12 +109,14 @@ Pages, Spring and the installer share this contract.
 
 | Request | Who | Returns |
 |---------|-----|---------|
-| `GET /api/kit` | anyone | `{kit, kit_name, customized, features: [ids], feature_details: [{id, name, category, labels, enabled}], roles: {admin\|staff\|member: {label}}, signup_role}` |
-| `GET /api/kit/admin` | admin | The same, plus `base_features` (from `KIT`/`FEATURES`), `recent_changes` (audit log), and for each feature: `source` (`kit` \| `env` \| `admin`), `override`, `always_on`, `setup` (`summary`, `steps`, `verify`, and the settings Flask reads, each with `configured: true/false`) and `ready` (all required Flask settings configured). Setting values are never returned. |
+| `GET /api/kit` | anyone | `{kit, kit_name, kit_source: admin\|env\|default, customized, degraded, features: [ids], feature_details: [{id, name, category, labels, enabled}], roles: {admin\|staff\|member: {label}}, signup_role}` |
+| `GET /api/kit/admin` | admin | The same, plus `base_features` (before overrides), `presets` (`{vanilla\|education\|business: {name, description, features, roles}}`), `degraded_reason`, `recent_changes` (audit log), and for each feature: `source` (`kit` \| `env` \| `admin`), `override`, `always_on`, `setup` (`summary`, `steps`, `verify`, and the settings Flask reads, each with `configured: true/false`) and `ready` (all required Flask settings configured). Setting values are never returned. |
 | `PUT /api/kit/admin/features` | admin | Body `{"features": {"social": true, "kasm": false}}`. Rejects unknown ids and disabling `core` with 400. Returns the admin payload. |
-| `DELETE /api/kit/admin/features/<id>` | admin | Clears that override, so `KIT`/`FEATURES` decide again. Returns the admin payload. |
+| `DELETE /api/kit/admin/features/<id>` | admin | Clears that override, so the kit decides again. Returns the admin payload. |
+| `PUT /api/kit/admin/kit` | admin | Body `{"kit": "vanilla\|education\|business"}`. Applies the preset and clears all overrides. An unknown kit gets 400. Returns the admin payload. |
+| `DELETE /api/kit/admin/kit` | admin | Forgets the stored kit and all overrides, returning to `KIT`/`FEATURES`. Returns the admin payload. |
 
-Anonymous callers get 401, and staff and members get 403. Both a login session and the JWT cookie from `/api/authenticate` work.
+`customized` is true when the result differs from the preset. Anonymous callers get 401, and staff and members get 403. A change that cannot be saved gets 503. Both a login session and the JWT cookie from `/api/authenticate` work.
 
 ```bash
 curl -c jar -X POST http://localhost:8587/api/authenticate -H 'Content-Type: application/json' \
