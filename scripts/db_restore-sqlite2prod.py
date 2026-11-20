@@ -52,14 +52,19 @@ IMPORT_ENDPOINTS = {
     'leaderboard':            '/api/export/import/leaderboard',
     'elementary_leaderboard': '/api/export/import/elementary_leaderboard',
     'skill_snapshots':        '/api/export/import/skill_snapshots',
+    'site_events':            '/api/export/import/site_events',
+    'site_event_posts':       '/api/export/import/site_event_posts',
+    'site_event_photos':      '/api/export/import/site_event_photos',
 }
 
 # Data types large enough to need batched uploads
 LARGE_DATA_TYPES = {
     'users', 'microblogs', 'posts', 'user_personas', 'personas',
     'leaderboard', 'elementary_leaderboard', 'skill_snapshots',
+    'site_event_photos',
 }
 BATCH_SIZE = 50
+BATCH_SIZES = {'site_event_photos': 3}  # photos travel as base64, so keep their batches small
 
 # ── Local data readers ─────────────────────────────────────────────────────────
 
@@ -177,6 +182,14 @@ def read_local_data_from_db():
                 all_data['skill_snapshots'].append(snapshot_data)
             print(f"    Found {len(all_data['skill_snapshots'])} skill snapshots")
 
+            from api.data_export_import_api import (_export_site_events, _export_site_event_posts,
+                                                    _export_site_event_photos)
+            all_data['site_events'] = _export_site_events()
+            all_data['site_event_posts'] = _export_site_event_posts()
+            all_data['site_event_photos'] = _export_site_event_photos()
+            print(f"    Found {len(all_data['site_events'])} site events, "
+                  f"{len(all_data['site_event_posts'])} posts, {len(all_data['site_event_photos'])} photos")
+
             return all_data, None
 
     except Exception as e:
@@ -236,11 +249,12 @@ def import_all_data(all_data, cookies):
             continue
 
         url = BASE_URL + endpoint
-        use_batching = data_type in LARGE_DATA_TYPES and len(data_list) > BATCH_SIZE
+        batch_size = BATCH_SIZES.get(data_type, BATCH_SIZE)
+        use_batching = data_type in LARGE_DATA_TYPES and len(data_list) > batch_size
 
         if use_batching:
-            batches = [data_list[i:i + BATCH_SIZE] for i in range(0, len(data_list), BATCH_SIZE)]
-            print(f"  Uploading {data_type} ({len(data_list)} records in batches of {BATCH_SIZE})...")
+            batches = [data_list[i:i + batch_size] for i in range(0, len(data_list), batch_size)]
+            print(f"  Uploading {data_type} ({len(data_list)} records in batches of {batch_size})...")
             combined = {'imported': 0, 'failed': 0, 'errors': []}
 
             for i, batch in enumerate(batches, 1):

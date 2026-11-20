@@ -16,6 +16,7 @@ from model.microblog import MicroBlog, Topic
 from model.classroom import Classroom
 from model.feedback import Feedback
 from model.study import Study
+from model.site_event import SiteEvent, SiteEventPost, SiteEventPhoto
 from model.persona import Persona, UserPersona
 from model.leaderboard import ScoreCounterEvent, ElementaryLeaderboardEvent
 from model.skill_snapshot import SkillSnapshot
@@ -52,6 +53,9 @@ MIGRATED_MODELS = {
     'leaderboard':              ScoreCounterEvent,
     'elementary_leaderboard':   ElementaryLeaderboardEvent,
     'skill_snapshots':          SkillSnapshot,
+    'site_events':              SiteEvent,
+    'site_event_posts':         SiteEventPost,
+    'site_event_photos':        SiteEventPhoto,
 }
 
 
@@ -121,6 +125,9 @@ class ExportAllData(Resource):
                 'leaderboard': self._export_event_table(ScoreCounterEvent),
                 'elementary_leaderboard': self._export_event_table(ElementaryLeaderboardEvent),
                 'skill_snapshots': self._export_skill_snapshots(),
+                'site_events': _export_site_events(),
+                'site_event_posts': _export_site_event_posts(),
+                'site_event_photos': _export_site_event_photos(),
             }
 
             # Add metadata
@@ -308,6 +315,9 @@ class ImportAllData(Resource):
             'leaderboard': {'imported': 0, 'failed': 0, 'errors': []},
             'elementary_leaderboard': {'imported': 0, 'failed': 0, 'errors': []},
             'skill_snapshots': {'imported': 0, 'failed': 0, 'errors': []},
+            'site_events': {'imported': 0, 'failed': 0, 'errors': []},
+            'site_event_posts': {'imported': 0, 'failed': 0, 'errors': []},
+            'site_event_photos': {'imported': 0, 'failed': 0, 'errors': []},
         }
 
         try:
@@ -364,6 +374,14 @@ class ImportAllData(Resource):
             # 12. Skill snapshots (depend on users)
             if 'skill_snapshots' in data:
                 results['skill_snapshots'] = self._import_skill_snapshots(data['skill_snapshots'])
+
+            # 13. Site events, then their posts and photos (which belong to an event)
+            if 'site_events' in data:
+                results['site_events'] = _import_site_events(data['site_events'])
+            if 'site_event_posts' in data:
+                results['site_event_posts'] = _import_site_event_posts(data['site_event_posts'])
+            if 'site_event_photos' in data:
+                results['site_event_photos'] = _import_site_event_photos(data['site_event_photos'])
 
             return jsonify({
                 'message': 'Import completed',
@@ -1376,6 +1394,187 @@ class ImportSkillSnapshots(Resource):
             return {'message': f'Import failed: {str(e)}'}, 500
 
 
+# --- Site events (feature 'events') ---------------------------------------------------------------
+# Events keep their ids so posts and photos still point at the right event after an import.
+# Photo files travel inside the export as base64 and are checked again by content on import.
+
+def _export_site_events():
+    return [dict(e.read(), skipped=e.skipped_starts() and sorted(e.skipped_starts()) or [])
+            for e in SiteEvent.query.order_by(SiteEvent.id).all()]
+
+
+def _export_site_event_posts():
+    return [p.read() for p in SiteEventPost.query.order_by(SiteEventPost.id).all()]
+
+
+def _export_site_event_photos():
+    import base64
+    import os
+    from flask import current_app
+    folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'events')
+    out = []
+    for photo in SiteEventPhoto.query.order_by(SiteEventPhoto.id).all():
+        item = {'id': photo.id, 'event_id': photo.event_id, 'filename': photo.filename,
+                'caption': photo.caption, 'uploaded_at': photo.uploaded_at.isoformat() if photo.uploaded_at else None}
+        try:
+            with open(os.path.join(folder, os.path.basename(photo.filename)), 'rb') as fh:
+                item['data'] = base64.b64encode(fh.read()).decode('ascii')
+        except OSError:
+            item['data'] = None  # file missing on this server; the row still moves
+        out.append(item)
+    return out
+
+
+def _import_site_events(rows):
+    import json
+    from model.site_event import SiteEvent as Event, parse_date, parse_dt
+    imported = failed = 0
+    errors = []
+    for row in rows:
+        try:
+            if row.get('id') and db.session.get(Event, row['id']):
+                continue  # already there: an import never overwrites
+            event = Event(title=row['title'], start=parse_dt(row['start']), end=parse_dt(row.get('end')),
+                          location=row.get('location'), description=row.get('description'),
+                          status=row.get('status') or 'published', repeat=row.get('repeat') or 'none',
+                          repeat_until=parse_date(row.get('repeat_until')))
+            if row.get('id'):
+                event.id = row['id']
+            if row.get('skipped'):
+                event.skipped = json.dumps(row['skipped'])
+            db.session.add(event)
+            db.session.commit()
+            imported += 1
+        except Exception as e:
+            db.session.rollback()
+            failed += 1
+            errors.append('Site event: %s' % e)
+    return {'imported': imported, 'failed': failed, 'errors': errors}
+
+
+def _import_site_event_posts(rows):
+    from model.site_event import SiteEvent as Event, SiteEventPost as Post, parse_dt
+    imported = failed = 0
+    errors = []
+    for row in rows:
+        try:
+            if row.get('id') and db.session.get(Post, row['id']):
+                continue
+            if db.session.get(Event, row['event_id']) is None:
+                raise ValueError('event %s not found' % row['event_id'])
+            post = Post(event_id=row['event_id'], title=row['title'], body=row['body'],
+                        kind=row.get('kind') or 'before', publish_at=parse_dt(row['publish_at']),
+                        unpublish_at=parse_dt(row.get('unpublish_at')))
+            if row.get('id'):
+                post.id = row['id']
+            db.session.add(post)
+            db.session.commit()
+            imported += 1
+        except Exception as e:
+            db.session.rollback()
+            failed += 1
+            errors.append('Site event post: %s' % e)
+    return {'imported': imported, 'failed': failed, 'errors': errors}
+
+
+def _import_site_event_photos(rows):
+    import base64
+    import os
+    import uuid
+    from flask import current_app
+    from api.site_events_api import _image_type
+    from model.site_event import SiteEvent as Event, SiteEventPhoto as Photo
+    folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'events')
+    os.makedirs(folder, exist_ok=True)
+    imported = failed = 0
+    errors = []
+    for row in rows:
+        path = None
+        try:
+            if row.get('id') and db.session.get(Photo, row['id']):
+                continue
+            if db.session.get(Event, row['event_id']) is None:
+                raise ValueError('event %s not found' % row['event_id'])
+            data = base64.b64decode(row['data']) if row.get('data') else b''
+            ext = _image_type(data[:16]) if data else None
+            if ext is None:
+                raise ValueError('photo %s has no valid image data' % row.get('id'))
+            name = uuid.uuid4().hex + ext  # a fresh random name, never one taken from the export
+            path = os.path.join(folder, name)
+            with open(path, 'wb') as fh:
+                fh.write(data)
+            photo = Photo(row['event_id'], name, row.get('caption'))
+            if row.get('id'):
+                photo.id = row['id']
+            db.session.add(photo)
+            db.session.commit()
+            imported += 1
+        except Exception as e:
+            db.session.rollback()
+            if path and os.path.exists(path):
+                os.remove(path)
+            failed += 1
+            errors.append('Site event photo: %s' % e)
+    return {'imported': imported, 'failed': failed, 'errors': errors}
+
+
+class ExportSiteEvents(Resource):
+    @token_required()
+    def get(self):
+        if not g.current_user.is_admin():
+            return {'message': 'Admin privileges required'}, 403
+        rows = _export_site_events()
+        return jsonify({'site_events': rows, 'count': len(rows)})
+
+
+class ExportSiteEventPosts(Resource):
+    @token_required()
+    def get(self):
+        if not g.current_user.is_admin():
+            return {'message': 'Admin privileges required'}, 403
+        rows = _export_site_event_posts()
+        return jsonify({'site_event_posts': rows, 'count': len(rows)})
+
+
+class ExportSiteEventPhotos(Resource):
+    @token_required()
+    def get(self):
+        if not g.current_user.is_admin():
+            return {'message': 'Admin privileges required'}, 403
+        rows = _export_site_event_photos()
+        return jsonify({'site_event_photos': rows, 'count': len(rows)})
+
+
+def _chunk_import(key, importer):
+    if not g.current_user.is_admin():
+        return {'message': 'Admin privileges required'}, 403
+    data = request.get_json(silent=True) or {}
+    try:
+        result = importer(data.get(key, []))
+        return jsonify({key: result, 'message': key + ' import complete'})
+    except Exception as e:
+        db.session.rollback()
+        return {'message': f'Import failed: {str(e)}'}, 500
+
+
+class ImportSiteEvents(Resource):
+    @token_required()
+    def post(self):
+        return _chunk_import('site_events', _import_site_events)
+
+
+class ImportSiteEventPosts(Resource):
+    @token_required()
+    def post(self):
+        return _chunk_import('site_event_posts', _import_site_event_posts)
+
+
+class ImportSiteEventPhotos(Resource):
+    @token_required()
+    def post(self):
+        return _chunk_import('site_event_photos', _import_site_event_photos)
+
+
 # Register endpoints
 api.add_resource(ExportAllData, '/all')
 api.add_resource(ImportAllData, '/import')
@@ -1395,6 +1594,9 @@ api.add_resource(ExportUserPersonas, '/user_personas')
 api.add_resource(ExportLeaderboard, '/leaderboard')
 api.add_resource(ExportElementaryLeaderboard, '/elementary_leaderboard')
 api.add_resource(ExportSkillSnapshots, '/skill_snapshots')
+api.add_resource(ExportSiteEvents, '/site_events')
+api.add_resource(ExportSiteEventPosts, '/site_event_posts')
+api.add_resource(ExportSiteEventPhotos, '/site_event_photos')
 
 # Chunked import endpoints (POST to same paths as export)
 api.add_resource(ImportSections, '/import/sections')
@@ -1410,3 +1612,6 @@ api.add_resource(ImportUserPersonas, '/import/user_personas')
 api.add_resource(ImportLeaderboard, '/import/leaderboard')
 api.add_resource(ImportElementaryLeaderboard, '/import/elementary_leaderboard')
 api.add_resource(ImportSkillSnapshots, '/import/skill_snapshots')
+api.add_resource(ImportSiteEvents, '/import/site_events')
+api.add_resource(ImportSiteEventPosts, '/import/site_event_posts')
+api.add_resource(ImportSiteEventPhotos, '/import/site_event_photos')

@@ -23,7 +23,7 @@ import os
 # Effective features = a kit applied by an admin (PUT /api/kit/admin/kit), else KIT and FEATURES,
 # then admin overrides (PUT /api/kit/admin/features). Both are read per request, so no restart
 # is needed.
-from model import feature_override
+from model import feature_override, site_event
 features.set_kit_provider(feature_override.read_stored_kit)
 features.set_override_provider(feature_override.read_overrides)
 
@@ -34,6 +34,7 @@ _registered = features.register_blueprints(app)
 
 with app.app_context():
     feature_override.ensure_tables()  # databases created before these tables existed
+    site_event.ensure_tables()  # same for the events tables
     print(f"** Kit: {features.kit_name()} | features: {', '.join(features.enabled_features())}")
     # Startup hooks of enabled features (e.g. the jokes file for 'examples')
     features.run_hooks('startup')
@@ -211,8 +212,24 @@ def generate_data():
 # Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)
         
+def bootstrap_empty_database():
+    """First run of the development server on a database with no tables: create them and seed the
+    demo data, so `python main.py` works without running scripts/db_init.py first (the login
+    otherwise fails with "no such table: users"). Never on a production setup, and never when
+    the tables already exist, so existing data is not touched."""
+    if os.environ.get('IS_PRODUCTION', 'false').lower() == 'true':
+        return
+    with app.app_context():
+        if db.inspect(db.engine).has_table('users'):
+            return
+        print("** Empty database: creating the tables and demo data (same as scripts/db_init.py)")
+        db.create_all()
+        seed_data(accounts=True)
+
+
 # this runs the flask application on the development server
 if __name__ == "__main__":
+    bootstrap_empty_database()
     host = "0.0.0.0"
     port = app.config['FLASK_PORT']
     print(f"** Server running: http://localhost:{port}")  # Pretty link

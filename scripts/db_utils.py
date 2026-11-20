@@ -85,6 +85,7 @@ MIGRATED_TYPES = [
     'sections', 'users', 'topics', 'microblogs', 'posts', 'classrooms',
     'feedback', 'study', 'personas', 'user_personas',
     'leaderboard', 'elementary_leaderboard', 'skill_snapshots',
+    'site_events', 'site_event_posts', 'site_event_photos',
 ]
 
 
@@ -113,6 +114,7 @@ def local_counts():
     from model.persona import Persona, UserPersona
     from model.leaderboard import ScoreCounterEvent, ElementaryLeaderboardEvent
     from model.skill_snapshot import SkillSnapshot
+    from model.site_event import SiteEvent, SiteEventPost, SiteEventPhoto
     from main import db
 
     models = {
@@ -122,6 +124,8 @@ def local_counts():
         'leaderboard': ScoreCounterEvent,
         'elementary_leaderboard': ElementaryLeaderboardEvent,
         'skill_snapshots': SkillSnapshot,
+        'site_events': SiteEvent, 'site_event_posts': SiteEventPost,
+        'site_event_photos': SiteEventPhoto,
     }
     counts = {name: model.query.count() for name, model in models.items()}
     counts['user_sections'] = UserSection.query.count()

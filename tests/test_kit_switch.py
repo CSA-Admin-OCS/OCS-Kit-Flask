@@ -23,6 +23,7 @@ PROBES = {
     'ai-chatbot': '/api/groq/models',
     'analytics': '/api/user/skill-passport',
     'assignments': '/api/study',
+    'events': '/api/site-events',
     'examples': '/api/jokes',
     'game-engine': '/api/dynamic/leaderboard',
     'social': '/api/microblog',
@@ -120,9 +121,9 @@ def test_preset_is_applied_exactly(app, kit):
 
 
 def test_exact_lists_of_the_catalog():
-    assert _preset('vanilla') == {'core'}
-    assert _preset('business') == {'core', 'ai-chatbot', 'social', 'calendar', 'analytics', 'resume'}
-    assert _preset('education') == {'core', 'lessons', 'code-runner', 'assignments', 'game-engine', 'ai-chatbot',
+    assert _preset('vanilla') == {'core', 'events'}
+    assert _preset('business') == {'core', 'events', 'ai-chatbot', 'social', 'calendar', 'analytics', 'resume'}
+    assert _preset('education') == {'core', 'events', 'lessons', 'code-runner', 'assignments', 'game-engine', 'ai-chatbot',
                                     'ai-grading', 'calendar', 'analytics', 'hallpass', 'social', 'resume'}
 
 
@@ -517,7 +518,7 @@ def test_round_trip_preserves_data_accounts_and_sessions(app):
             return {u.uid: (u.id, u.role) for u in User.query.all()}
 
     # vanilla, plus social as an override
-    assert set(_switch(admin, 'vanilla')['features']) == {'core'}
+    assert set(_switch(admin, 'vanilla')['features']) == {'core', 'events'}
     assert _posts(member)[0] == 404
     _override(admin, {'social': True})
     seen = accounts()

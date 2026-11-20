@@ -36,9 +36,9 @@ A kit is a preset list of features with its own names for the three roles. Pick 
 
 | `KIT` | Features | Roles (admin / staff / member) and seeded uids |
 |-------|----------|-----------------------------------------------|
-| `vanilla` | Core only: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. | Admin / Editor / User: `admin`, `editor`, `user` |
-| `education` | Core plus lessons, code runners, assignments, game engine, AI chatbot, AI grading, calendar, analytics, hall pass, social and resume. | Admin / Teacher / Student: `admin`, `teacher`, `student` |
-| `business` | Core plus AI chatbot, social, calendar, analytics and resume. | Admin / Manager / Member: `admin`, `manager`, `member` |
+| `vanilla` | Core plus events: accounts, login, sections, classrooms, profile pictures, data export/import, feedback, admin pages. Safe to give to students. | Admin / Editor / User: `admin`, `editor`, `user` |
+| `education` | Core plus events, lessons, code runners, assignments, game engine, AI chatbot, AI grading, calendar, analytics, hall pass, social and resume. | Admin / Teacher / Student: `admin`, `teacher`, `student` |
+| `business` | Core plus events, AI chatbot, social, calendar, analytics and resume. | Admin / Manager / Member: `admin`, `manager`, `member` |
 | *(empty)* | Every feature, as before kits existed. `/api/kit` reports `"kit": "default"`. | Admin / Teacher / User: `admin`, `teacher`, `user` |
 
 Each feature has a **category**: `core` is always on, `general` features are useful to any organization, and `education` features are for classrooms. Each feature also has **labels** that say what it needs and what data it handles, such as `needs-api-key`, `personal-data`, `student-safe` or `runs-code`. Check the labels before you turn a feature on. Each feature also has a **setup guide**: the settings it needs and which service reads them, the manual steps, and how to check that it works. It all lives in [`kits/catalog.json`](kits/catalog.json), and `python -m features --list` prints a summary.
@@ -46,6 +46,7 @@ Each feature has a **category**: `core` is always on, `general` features are use
 | Feature | Category | Flask endpoints (prefix) |
 |---------|----------|--------------------------|
 | `core` | core | `/api/kit`, `/api/authenticate`, `/api/user`, `/api/section`, `/api/id` (pfp), `/api/classrooms`, `/api/export`, `/api/feedback`, admin pages |
+| `events` | general | `/api/site-events` (not `/api/events`, which the game engine's leaderboard uses) |
 | `code-runner` | general | `/run/python`, `/run/javascript` |
 | `game-engine` | general | `/api/ainpc`, `/api/profile/game`, `/api/dynamic`, `/api/events` |
 | `ai-chatbot` | general | `/api/gemini`, `/api/groq` |
@@ -125,6 +126,17 @@ curl -b jar http://localhost:8587/api/kit/admin
 curl -b jar -X PUT http://localhost:8587/api/kit/admin/features -H 'Content-Type: application/json' \
   -d '{"features": {"social": false}}'
 ```
+
+### Events
+
+`events` is a small announcements feature for sites that run Flask only. Public visitors read; only the admin role writes.
+
+- `GET /api/site-events?when=upcoming|past|all&now=<ISO>&limit=<n>` lists published events as dated occurrences in time order. A repeating event (daily, weekly, monthly, with an optional end date) appears once per date, and an admin can skip a single date with `POST /api/site-events/<id>/skip`.
+- `GET /api/site-events/<id>` returns the event, its photos and the posts that are live at `now`. Posts are admin-written notes with a `publish_at` (and optional `unpublish_at`), tagged `before` or `after`, so a promo and a recap appear on their own schedule.
+- `GET /api/site-events/gallery` returns photos from events that have already started, newest first.
+- Admins use `GET /api/site-events/admin`, `POST/PUT/DELETE /api/site-events[/<id>]`, `/<id>/posts`, `/posts/<id>`, `/<id>/photos` and `DELETE /photos/<id>`.
+
+Times are wall-clock values without a time zone. Photos (PNG, JPEG, GIF or WebP, up to 5 MB) are checked by their content, saved under `instance/uploads/events/` with random names, and included in the data export. The tables are `site_events`, `site_event_posts` and `site_event_photos`; a new install gets them from `db_init.py`, and an existing install gets them automatically the next time Flask starts (no data is touched).
 
 ### Adding a new feature
 

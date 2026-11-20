@@ -61,6 +61,9 @@ EXPORT_ENDPOINTS = {
     'leaderboard':            '/api/export/leaderboard',
     'elementary_leaderboard': '/api/export/elementary_leaderboard',
     'skill_snapshots':        '/api/export/skill_snapshots',
+    'site_events':            '/api/export/site_events',
+    'site_event_posts':       '/api/export/site_event_posts',
+    'site_event_photos':      '/api/export/site_event_photos',
 }
 
 # Data types that require paginated fetching
@@ -789,6 +792,21 @@ def load_skill_snapshots(snapshots_data):
     print(f"  Loaded {loaded} skill snapshots.")
 
 
+def load_site_events(rows):
+    from api.data_export_import_api import _import_site_events
+    print('  ', _import_site_events(rows))
+
+
+def load_site_event_posts(rows):
+    from api.data_export_import_api import _import_site_event_posts
+    print('  ', _import_site_event_posts(rows))
+
+
+def load_site_event_photos(rows):
+    from api.data_export_import_api import _import_site_event_photos
+    print('  ', _import_site_event_photos(rows))
+
+
 def load_all(all_data):
     """Load all data types into the local database in dependency order."""
     user_uid_map = {u.get('id'): u.get('uid') for u in all_data.get('users', []) if u.get('id') and u.get('uid')}
@@ -810,6 +828,11 @@ def load_all(all_data):
                           lambda: load_elementary_leaderboard(all_data.get('elementary_leaderboard', []))),
         ('skill_snapshots',
                           lambda: load_skill_snapshots(all_data.get('skill_snapshots', []))),
+        ('site_events',   lambda: load_site_events(all_data.get('site_events', []))),
+        ('site_event_posts',
+                          lambda: load_site_event_posts(all_data.get('site_event_posts', []))),
+        ('site_event_photos',
+                          lambda: load_site_event_photos(all_data.get('site_event_photos', []))),
     ]
 
     for name, loader in loaders:

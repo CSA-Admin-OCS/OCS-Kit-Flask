@@ -163,6 +163,13 @@ app.config['SQLALCHEMY_DATABASE_STRING'] = dbString
 app.config['SQLALCHEMY_DATABASE_URI'] = dbURI
 app.config['SQLALCHEMY_BACKUP_URI'] = backupURI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# A SQLite file needs its folder. The default one (instance/volumes/) is gitignored, so a fresh
+# clone does not have it and every request failed with "unable to open database file".
+if dbURI.startswith('sqlite:///') and ':memory:' not in dbURI:
+   _sqlite_path = dbURI[len('sqlite:///'):].split('?')[0]
+   if not os.path.isabs(_sqlite_path):
+      _sqlite_path = os.path.join(app.instance_path, _sqlite_path)  # Flask-SQLAlchemy's own rule
+   os.makedirs(os.path.dirname(_sqlite_path), exist_ok=True)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 

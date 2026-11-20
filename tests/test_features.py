@@ -36,7 +36,7 @@ def test_star_override_means_every_feature():
 
 
 def test_vanilla_is_core_only():
-    assert resolve('vanilla', '') == ('vanilla', False, ['core'])
+    assert resolve('vanilla', '') == ('vanilla', False, ['core', 'events'])
 
 
 def test_education_preset():
