@@ -11,6 +11,13 @@
         <code>permissions.json</code>. <b>Unreviewed</b> requests are open to anyone until someone decides.
     </p>
 
+    <p class="small mb-3">
+        <span class="badge bg-danger">locked</span> cannot be changed here (login and this page) &nbsp;
+        <span class="badge bg-success">reviewed</span> its level has been decided &nbsp;
+        <span class="badge bg-warning text-dark">unreviewed</span> open to anyone until someone decides &nbsp;
+        <span class="perm-changed-key"></span> blue bar: changed
+    </p>
+
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
         <input id="filter" type="search" class="form-control" style="max-width: 22rem" placeholder="Filter, e.g. /api/study or POST">
         <select id="show" class="form-select" style="max-width: 14rem">
@@ -18,6 +25,8 @@
             <option value="unreviewed">Unreviewed only</option>
             <option value="changed">Changed by an admin</option>
         </select>
+        <button id="expand" class="btn btn-outline-secondary btn-sm">Expand all</button>
+        <button id="collapse" class="btn btn-outline-secondary btn-sm">Collapse all</button>
         <span id="pending" class="ms-auto"></span>
         <button id="save" class="btn btn-primary" disabled>Save changes</button>
         <button id="discard" class="btn btn-outline-secondary" disabled>Discard</button>
@@ -35,6 +44,7 @@
     const api = "{{ url_for('permissions_admin.get_permissions') }}";
     let data = null;
     const pending = {};   // request -> level, or null to reset; nothing is sent until Save
+    const opened = new Set();   // feature ids the admin has opened
 
     const $ = (id) => document.getElementById(id);
     const el = (tag, text, cls) => {
@@ -53,6 +63,9 @@
     const levelNow = (row) => (row.request in pending
         ? (pending[row.request] === null ? row.file_level : pending[row.request])
         : row.level);
+
+    // a filter or a narrowed list is active: every group that still has rows is shown open
+    const filtering = () => $("filter").value.trim() !== "" || $("show").value !== "all";
 
     function matches(row) {
         const text = $("filter").value.trim().toLowerCase();
@@ -92,9 +105,22 @@
         for (const feature of data.features) {
             const rows = data.requests.filter((row) => row.feature === feature.id && matches(row));
             if (!rows.length) continue;
-            const card = el("div", undefined, "card mb-3");
-            const head = el("div", undefined, "card-header d-flex align-items-center gap-2");
-            head.append(el("strong", feature.name), el("span", rows.length + " requests", "text-muted small"));
+            // each feature is a drop-down table: closed until opened, or open while a filter is narrowing the list
+            const card = el("details", undefined, "card mb-3 perm-group");
+            card.open = filtering() || opened.has(feature.id);
+            card.addEventListener("toggle", () => {
+                if (filtering()) return;   // forced open by the filter: not the admin's choice
+                if (card.open) opened.add(feature.id); else opened.delete(feature.id);
+            });
+            const head = el("summary", undefined, "card-header d-flex align-items-center gap-2");
+            const unreviewed = rows.filter((row) => levelNow(row) === "unreviewed").length;
+            const changedCount = rows.filter((row) => row.request in pending || row.overridden).length;
+            head.append(el("span", "▶", "perm-chevron"), el("strong", feature.name),
+                        el("span", rows.length + (rows.length === 1 ? " request" : " requests"), "text-muted small"));
+            const locked = rows.filter((row) => row.pinned).length;
+            if (locked) head.append(el("span", locked + " locked", "badge bg-danger"));
+            if (unreviewed) head.append(el("span", unreviewed + " unreviewed", "badge bg-warning text-dark"));
+            if (changedCount) head.append(el("span", changedCount + " changed", "badge bg-info text-dark"));
             if (!feature.enabled) head.append(el("span", "feature is off", "badge bg-secondary"));
             const table = el("table", undefined, "table table-sm table-hover mb-0 align-middle");
             const body = el("tbody");
@@ -102,7 +128,7 @@
                 const tr = el("tr");
                 const name = el("td");
                 name.append(el("span", row.method, "badge bg-light text-dark me-2"), el("code", row.route));
-                if (row.pinned) name.append(el("span", "pinned", "badge bg-dark ms-2"));
+                if (row.pinned) name.append(el("span", "locked", "badge bg-danger ms-2"));
                 const level = el("td");
                 level.style.width = "13rem";
                 level.append(levelSelect(row));
@@ -120,7 +146,11 @@
                     reset.append(button);
                 }
                 tr.append(name, level, note, reset);
-                if (changed) tr.classList.add("table-warning");
+                // colour says how settled the request is, using the level it will have once saved
+                if (row.pinned) tr.classList.add("table-danger");
+                else if (levelNow(row) === "unreviewed") tr.classList.add("table-warning");
+                else tr.classList.add("table-success");
+                if (changed) tr.classList.add("perm-changed");
                 body.append(tr);
             }
             table.append(body);
@@ -147,6 +177,14 @@
         render();
     }
 
+    $("expand").addEventListener("click", () => {
+        for (const feature of data.features) opened.add(feature.id);
+        render();
+    });
+    $("collapse").addEventListener("click", () => {
+        opened.clear();
+        render();
+    });
     $("filter").addEventListener("input", render);
     $("show").addEventListener("change", render);
     $("discard").addEventListener("click", () => {
@@ -172,6 +210,18 @@
     fetch(api).then(load).catch((error) => say(error.message, "danger"));
 })();
 </script>
+{% endblock %}
+
+{% block style %}
+<style>
+    .perm-group > summary { cursor: pointer; list-style: none; }
+    .perm-group > summary::-webkit-details-marker { display: none; }
+    .perm-chevron { display: inline-block; font-size: .7rem; transition: transform .15s; }
+    .perm-group[open] > summary .perm-chevron { transform: rotate(90deg); }
+    /* a changed request keeps its colour and gets a blue bar on the left */
+    .perm-changed td:first-child, .perm-changed-key { box-shadow: inset 4px 0 0 #0d6efd; }
+    .perm-changed-key { display: inline-block; width: 1.2rem; height: 1rem; vertical-align: middle; }
+</style>
 {% endblock %}
 
 {% block background %}
