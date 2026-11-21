@@ -624,16 +624,18 @@ class User(db.Model, UserMixin):
             return None
         return self
     
-    # CRUD delete: remove self
-    # None
+    # CRUD delete: remove self. True when the account is gone, False when the database refused
+    # (the user still owns records such as posts or classrooms), and nothing was changed.
     def delete(self):
+        uid = self.uid
         try:
-            KasmUser().delete(self.uid)
             db.session.delete(self)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-        return None   
+            return False
+        KasmUser().delete(uid)  # only once the account is really gone; Kasm is a complementary service
+        return True
     
     def save_pfp(self, image_data, filename):
         """For saving profile picture."""
@@ -871,3 +873,16 @@ def initUsers():
         u2.add_section(s2)
         u2.add_section(s3)
         u3.add_section(s4)
+
+
+def delete_account(user, actor):
+    """Delete an account on behalf of an admin: (body, status) for the answer. One place for the rules,
+    used by every route that deletes users."""
+    if user is None:
+        return {'message': 'User not found'}, 404
+    if user.id == actor.id:
+        return {'message': 'You cannot delete your own account; ask another admin.'}, 400
+    uid = user.uid
+    if not user.delete():
+        return {'message': f'User {uid} still owns records (posts, classrooms, ...) and was not deleted.'}, 409
+    return {'message': f'Deleted user {uid}'}, 200

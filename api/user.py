@@ -9,7 +9,7 @@ from flask_restful import Api, Resource # used for REST API building
 from datetime import datetime, timedelta
 from __init__ import app, db
 from api.authorize import token_required
-from model.user import User, meets_password_rule, WeakPasswordError
+from model.user import User, delete_account, meets_password_rule, WeakPasswordError
 from model.github import GitHubUser
 import os
 
@@ -363,23 +363,14 @@ class UserAPI:
             Returns:
                 JSON response with a success message or an error message.
             """
-            body = request.get_json()
-            uid = body.get('uid')
-            
-            """ User SQLAlchemy query returning a single user """
-            user = User.query.filter_by(_uid=uid).first()
-            
-            # bad request
-            if user is None:
-                return {'message': f'User {uid} not found'}, 404
-           
-            # Read and then Delete the User object using custom methods
-            user_json = _without_password(user.read())
-            user.delete()
-            
-            # 204 is the status code for delete with no json response
-            return f"Deleted user: {user_json}", 204 # use 200 to test with Postman
-         
+            body = request.get_json(silent=True)
+            has_uid = isinstance(body, dict) and isinstance(body.get('uid'), str)
+            if not has_uid:
+                return {'message': 'Send a JSON object with the uid of the user to delete'}, 400
+
+            user = User.query.filter_by(_uid=body['uid']).first()
+            return delete_account(user, g.current_user)
+
     class _Section(Resource):  # Section API operation
         @token_required()
         def get(self):

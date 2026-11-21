@@ -16,7 +16,7 @@ from api.authorize import admin_page_required, staff_page_required
 # Models: every feature's models are imported whatever the kit, so all tables and
 # foreign keys exist in every kit (the User model relates to personas, posts, etc.).
 features.import_all_models()
-from model.user import User, Section, initUsers  # initUsers: used by scripts/db_migrate-prod2sqlite.py
+from model.user import User, Section, delete_account, initUsers  # initUsers: used by scripts/db_migrate-prod2sqlite.py
 
 import os
 
@@ -151,11 +151,8 @@ def uploaded_file(filename):
 @app.route('/users/delete/<int:user_id>', methods=['DELETE'])
 @admin_page_required
 def delete_user(user_id):
-    user = User.query.get(user_id)
-    if user:
-        user.delete()
-        return jsonify({'message': 'User deleted successfully'}), 200
-    return jsonify({'error': 'User not found'}), 404
+    body, status = delete_account(User.query.get(user_id), current_user)
+    return jsonify(body), status
 
 @app.route('/users/reset_password/<int:user_id>', methods=['POST'])
 @admin_page_required
