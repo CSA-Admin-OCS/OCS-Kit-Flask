@@ -1,0 +1,178 @@
+{% extends "layouts/base.html" %}
+{% set project = "Permissions" %}
+
+{% block body %}
+<div class="container mt-5 mb-5">
+    <h1>Permissions</h1>
+    <p class="text-muted">
+        Who may make each request, grouped by feature. Levels rise from <b>public</b> (anyone, signed in or not)
+        through each role of this kit up to the admin, and a role may make every request at or below its own level.
+        Your change is saved in the database and applies on the next request. <b>Reset</b> goes back to the level in
+        <code>permissions.json</code>. <b>Unreviewed</b> requests are open to anyone until someone decides.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <input id="filter" type="search" class="form-control" style="max-width: 22rem" placeholder="Filter, e.g. /api/study or POST">
+        <select id="show" class="form-select" style="max-width: 14rem">
+            <option value="all">All requests</option>
+            <option value="unreviewed">Unreviewed only</option>
+            <option value="changed">Changed by an admin</option>
+        </select>
+        <span id="pending" class="ms-auto"></span>
+        <button id="save" class="btn btn-primary" disabled>Save changes</button>
+        <button id="discard" class="btn btn-outline-secondary" disabled>Discard</button>
+    </div>
+    <div id="status" class="alert d-none" role="alert"></div>
+
+    <div id="groups"></div>
+
+    <h2 class="h5 mt-5">Recent changes</h2>
+    <ul id="changes" class="list-unstyled small"></ul>
+</div>
+
+<script>
+(function () {
+    const api = "{{ url_for('permissions_admin.get_permissions') }}";
+    let data = null;
+    const pending = {};   // request -> level, or null to reset; nothing is sent until Save
+
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, text, cls) => {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (cls) node.className = cls;
+        return node;
+    };
+    const say = (message, kind) => {
+        const box = $("status");
+        box.textContent = message;
+        box.className = "alert alert-" + kind;
+    };
+
+    // the level a row will have once saved
+    const levelNow = (row) => (row.request in pending
+        ? (pending[row.request] === null ? row.file_level : pending[row.request])
+        : row.level);
+
+    function matches(row) {
+        const text = $("filter").value.trim().toLowerCase();
+        if (text && !row.request.toLowerCase().includes(text)) return false;
+        const show = $("show").value;
+        if (show === "unreviewed") return row.level === "unreviewed";  // saved level, so a row stays while you pick
+        if (show === "changed") return row.overridden || row.request in pending;
+        return true;
+    }
+
+    function levelSelect(row) {
+        const select = el("select", undefined, "form-select form-select-sm");
+        select.disabled = row.pinned;
+        const options = data.levels.slice();
+        if (row.file_level === "unreviewed") options.push("unreviewed");
+        for (const level of options) {
+            const label = data.level_labels[level] || level;
+            const option = el("option", label + (level === row.file_level ? " (default)" : ""));
+            option.value = level;
+            option.disabled = level === "unreviewed" && levelNow(row) !== "unreviewed";
+            option.selected = level === levelNow(row);
+            select.append(option);
+        }
+        select.addEventListener("change", () => {
+            const level = select.value;
+            // choosing the saved level again is not a change
+            if (level === row.level) delete pending[row.request];
+            else pending[row.request] = level === row.file_level ? null : level;
+            render();
+        });
+        return select;
+    }
+
+    function render() {
+        const groups = $("groups");
+        groups.replaceChildren();
+        for (const feature of data.features) {
+            const rows = data.requests.filter((row) => row.feature === feature.id && matches(row));
+            if (!rows.length) continue;
+            const card = el("div", undefined, "card mb-3");
+            const head = el("div", undefined, "card-header d-flex align-items-center gap-2");
+            head.append(el("strong", feature.name), el("span", rows.length + " requests", "text-muted small"));
+            if (!feature.enabled) head.append(el("span", "feature is off", "badge bg-secondary"));
+            const table = el("table", undefined, "table table-sm table-hover mb-0 align-middle");
+            const body = el("tbody");
+            for (const row of rows) {
+                const tr = el("tr");
+                const name = el("td");
+                name.append(el("span", row.method, "badge bg-light text-dark me-2"), el("code", row.route));
+                if (row.pinned) name.append(el("span", "pinned", "badge bg-dark ms-2"));
+                const level = el("td");
+                level.style.width = "13rem";
+                level.append(levelSelect(row));
+                const note = el("td", undefined, "small text-muted");
+                const changed = row.request in pending ? levelNow(row) !== row.level : row.overridden;
+                if (row.request in pending) note.textContent = "unsaved";
+                else if (row.overridden) note.textContent = "changed by an admin (default: " + (data.level_labels[row.file_level] || row.file_level) + ")";
+                const reset = el("td");
+                if (!row.pinned && (row.overridden || row.request in pending)) {
+                    const button = el("button", "Reset", "btn btn-sm btn-link");
+                    button.addEventListener("click", () => {
+                        if (row.overridden) pending[row.request] = null; else delete pending[row.request];
+                        render();
+                    });
+                    reset.append(button);
+                }
+                tr.append(name, level, note, reset);
+                if (changed) tr.classList.add("table-warning");
+                body.append(tr);
+            }
+            table.append(body);
+            card.append(head, table);
+            groups.append(card);
+        }
+        const count = Object.keys(pending).length;
+        $("pending").textContent = count ? count + " unsaved change" + (count > 1 ? "s" : "") : "";
+        $("save").disabled = $("discard").disabled = count === 0;
+        const log = $("changes");
+        log.replaceChildren();
+        for (const change of data.recent_changes) {
+            const text = `${change.at ? change.at.replace("T", " ").slice(0, 16) : ""}  ${change.by || "?"}: ` +
+                `${change.request}  ${change.from || "default"} -> ${change.to || "default"}`;
+            log.append(el("li", text));
+        }
+        if (!data.recent_changes.length) log.append(el("li", "No changes yet.", "text-muted"));
+    }
+
+    async function load(response) {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || "Request failed (" + response.status + ")");
+        data = body;
+        render();
+    }
+
+    $("filter").addEventListener("input", render);
+    $("show").addEventListener("change", render);
+    $("discard").addEventListener("click", () => {
+        for (const key of Object.keys(pending)) delete pending[key];
+        render();
+    });
+    $("save").addEventListener("click", async () => {
+        try {
+            const response = await fetch(api, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requests: pending }),
+            });
+            const saved = Object.keys(pending).length;
+            await load(response);
+            for (const key of Object.keys(pending)) delete pending[key];
+            render();
+            say("Saved " + saved + " change" + (saved > 1 ? "s" : "") + ". They apply from the next request.", "success");
+        } catch (error) {
+            say(error.message, "danger");
+        }
+    });
+
+    fetch(api).then(load).catch((error) => say(error.message, "danger"));
+})();
+</script>
+{% endblock %}
+
+{% block background %}
+{% endblock %}

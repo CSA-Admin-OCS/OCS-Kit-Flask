@@ -126,6 +126,7 @@
       "flask": {
         "blueprints": [
           "api.kit_api:kit_api",
+          "api.permissions_admin:permissions_admin",
           "api.user:user_api",
           "api.section:section_api",
           "api.pfp:pfp_api",
@@ -141,7 +142,8 @@
           "model.pfp",
           "model.feedback",
           "model.github",
-          "model.feature_override"
+          "model.feature_override",
+          "model.permission_override"
         ],
         "seed": [],
         "seed_accounts": [
@@ -156,6 +158,10 @@
           {
             "label": "Sections",
             "endpoint": "sections"
+          },
+          {
+            "label": "Permissions",
+            "endpoint": "permissions_admin.page"
           }
         ]
       }

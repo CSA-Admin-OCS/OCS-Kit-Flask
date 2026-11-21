@@ -124,6 +124,8 @@
     "PUT /api/kit/admin/kit",
     "POST /api/microblog/topics",
     "PUT /api/microblog/topics",
+    "GET /api/permissions",
+    "PUT /api/permissions",
     "POST /api/persona/create",
     "DELETE /api/persona/delete/<int:id>",
     "PUT /api/persona/update/<int:id>",
@@ -134,6 +136,7 @@
     "DELETE /api/user",
     "DELETE /delete_user/<user_id>",
     "GET /kasm_users",
+    "GET /permissions/",
     "GET /persona/",
     "PUT /update_user/<string:uid>",
     "DELETE /users/delete/<int:user_id>",
@@ -195,5 +198,13 @@
     "POST /run/javascript",
     "POST /run/python"
   ],
-  "api_paths": ["/api/", "/run/"]
+  "api_paths": ["/api/", "/run/"],
+  "pinned": [
+    "GET /login",
+    "POST /login",
+    "POST /api/authenticate",
+    "GET /permissions/",
+    "GET /api/permissions",
+    "PUT /api/permissions"
+  ]
 }

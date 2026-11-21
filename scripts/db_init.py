@@ -101,9 +101,10 @@ def main():
             # Step 3: Build New schema
             # Check if the database has any tables
             inspector = db.inspect(db.engine)
-            # main.py creates the (empty) feature override and kit tables on import; they
+            # main.py creates the (empty) feature override, kit and permission tables on import; they
             # alone do not mean there is data to lose.
-            tables = [t for t in inspector.get_table_names() if t not in ('feature_override', 'feature_audit', 'kit_setting')]
+            tables = [t for t in inspector.get_table_names() if t not in ('feature_override', 'feature_audit', 'kit_setting',
+                                                                                  'permission_override', 'permission_audit')]
             
             if tables:
                 print("Warning, you are about to lose all data in the database!")

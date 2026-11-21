@@ -20,6 +20,10 @@ on a route that is missing from the file.
 The file also says, under "api_paths", which paths are APIs. A caller with no login gets a 401 answer on those
 and is sent to the login page everywhere else (the admin pages).
 
+An admin can change the level of one request from the Permissions page (GET /permissions/). That change is stored
+in the database (model/permission_override.py) and wins over the file until it is cleared. The requests listed under
+"pinned" cannot be changed there, so nobody can lock the admins or everyone out.
+
 This file decides who gets as far as the route. A rule about one record (an account may change only its own
 profile) is still written in the route, where the record is known.
 
@@ -41,7 +45,7 @@ UNREVIEWED = 'unreviewed'
 ROLE_LEVELS = tuple(reversed(roles.ROLE_IDS))  # lowest trust first: member, staff, admin
 LEVELS = (PUBLIC,) + ROLE_LEVELS
 LISTS = LEVELS + (UNREVIEWED,)
-SETTINGS = ('api_paths',)
+SETTINGS = ('api_paths', 'pinned')
 LOWEST_ROLE = ROLE_LEVELS[0]  # what a stored role outside the kit's three counts as
 RANK = {PUBLIC: 0, UNREVIEWED: 0}
 RANK.update({role: number for number, role in enumerate(ROLE_LEVELS, start=1)})
@@ -52,8 +56,8 @@ _loaded = None
 
 
 def parse(data):
-    """(policy, api_paths) from the file's data: {request: level}, and the path prefixes that are APIs.
-    Raises ValueError, naming the entry, for anything unclear."""
+    """(policy, api_paths, pinned) from the file's data: {request: level}, the path prefixes that are APIs, and the
+    requests an admin cannot change. Raises ValueError, naming the entry, for anything unclear."""
     if not isinstance(data, dict):
         raise ValueError('permissions.json: expected an object with one list per level')
     for name in data:
@@ -73,7 +77,13 @@ def parse(data):
             if entry in policy:
                 raise ValueError(f'permissions.json: {entry} is in "{policy[entry]}" and in "{name}"; it can be in only one')
             policy[entry] = name
-    return policy, tuple(api_paths)
+    pinned = data.get('pinned', [])
+    if not isinstance(pinned, list):
+        raise ValueError('permissions.json: "pinned" must be a list of "METHOD /route" entries')
+    for entry in pinned:
+        if entry not in policy:
+            raise ValueError(f'permissions.json: {entry!r} in "pinned" is not in any level list')
+    return policy, tuple(api_paths), frozenset(pinned)
 
 
 def _load():
@@ -95,9 +105,30 @@ def api_paths():
     return _load()[1]
 
 
+def pinned():
+    """Requests an admin cannot change from the Permissions page."""
+    return _load()[2]
+
+
+def request_line(method, rule):
+    """How a request is written in the file: "METHOD /route". HEAD is answered like GET."""
+    return f'{"GET" if method == "HEAD" else method} {rule}'
+
+
 def level_of(method, rule):
-    """The level a request is listed at, or None when it is in no list."""
-    return policy().get(f'{"GET" if method == "HEAD" else method} {rule}')
+    """The level a request is listed at in the file, or None when it is in no list."""
+    return policy().get(request_line(method, rule))
+
+
+def effective_level(method, rule):
+    """The level that applies now: the one an admin set, else the file's; None when the request is in no list.
+    Raises when the admin's changes cannot be read, so the caller can refuse instead of guess."""
+    line = request_line(method, rule)
+    file_level = policy().get(line)
+    if file_level is None or line in pinned():
+        return file_level
+    from model import permission_override  # imported late: it needs the database
+    return permission_override.read_override(line) or file_level
 
 
 def caller_rank(user):
@@ -108,8 +139,11 @@ def caller_rank(user):
     return RANK[roles.role_id(user.role) or LOWEST_ROLE]
 
 
+ERROR_NAMES = {401: 'Unauthorized', 403: 'Forbidden', 503: 'Service Unavailable'}
+
+
 def _refuse(message, status):
-    return {'message': message, 'data': None, 'error': 'Unauthorized' if status == 401 else 'Forbidden'}, status
+    return {'message': message, 'data': None, 'error': ERROR_NAMES[status]}, status
 
 
 def _unlisted(rule):
@@ -147,7 +181,11 @@ def check_access():
     nothing_to_guard = request.method == 'OPTIONS' or rule is None or rule.endpoint == 'static'
     if nothing_to_guard:
         return None  # a CORS preflight carries no login; no route matched; static files are public
-    level = level_of(request.method, rule.rule)
+    try:
+        level = effective_level(request.method, rule.rule)
+    except Exception:
+        current_app.logger.exception('permissions: the levels an admin set cannot be read')
+        return _refuse('Permissions cannot be read right now. Try again shortly.', 503)
     if level is None:
         return _unlisted(rule)
     open_to_anyone = RANK[level] == 0

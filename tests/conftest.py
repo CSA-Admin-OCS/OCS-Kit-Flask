@@ -50,18 +50,21 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(autouse=True)
 def _no_overrides(request):
-    """Every test starts and ends without admin overrides or a stored kit."""
+    """Every test starts and ends without admin overrides (features and permissions) or a stored kit."""
     if 'app' not in request.fixturenames:
         yield
         return
     flask_app = request.getfixturevalue('app')
     from model.feature_override import FeatureOverride, KitSetting
+    from model.permission_override import PermissionAudit, PermissionOverride
     from __init__ import db
 
     def clear():
         with flask_app.app_context():
             FeatureOverride.query.delete()
             KitSetting.query.delete()
+            PermissionOverride.query.delete()
+            PermissionAudit.query.delete()
             db.session.commit()
     clear()
     yield

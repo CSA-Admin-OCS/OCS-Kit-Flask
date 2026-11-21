@@ -23,9 +23,10 @@ def test_file_is_valid_and_every_entry_is_in_one_list():
         data = json.load(fh)
     listed = [entry for name in permissions.LISTS for entry in data[name]]
     assert len(listed) == len(set(listed)), 'a request is in two lists'
-    parsed, api_paths = permissions.parse(data)
+    parsed, api_paths, pinned = permissions.parse(data)
     assert set(parsed) == set(listed)
     assert api_paths == tuple(data['api_paths'])
+    assert pinned == frozenset(data['pinned'])
 
 
 def test_file_matches_the_routes(app):
@@ -43,6 +44,8 @@ def test_file_matches_the_routes(app):
     ({'admin': ['GET /api/x', 'GET /api/x']}, 'in only one'),
     ({'api_paths': 'api'}, 'must be a list of path prefixes'),
     ({'api_paths': ['api/']}, 'must be a list of path prefixes'),
+    ({'pinned': 'GET /x'}, '"pinned" must be a list'),
+    ({'pinned': ['GET /api/x']}, 'is not in any level list'),
 ])
 def test_unclear_file_is_refused(data, message):
     with pytest.raises(ValueError, match=message):
@@ -50,7 +53,7 @@ def test_unclear_file_is_refused(data, message):
 
 
 def test_a_missing_list_is_empty():
-    assert permissions.parse({'admin': ['GET /api/x']}) == ({'GET /api/x': 'admin'}, ())
+    assert permissions.parse({'admin': ['GET /api/x']}) == ({'GET /api/x': 'admin'}, (), frozenset())
 
 
 def test_unreviewed_is_open_but_listed_apart():
@@ -152,7 +155,7 @@ def test_disabled_feature_still_answers_404_first(app):
 def test_api_paths_come_from_the_file(app, monkeypatch):
     """Change what counts as an API and a request with no login is answered differently, with no code change."""
     assert _answer(app, 'GET', '/api/export/counts', None) == 401
-    monkeypatch.setattr(permissions, '_loaded', (permissions.policy(), ('/somewhere-else/',)))
+    monkeypatch.setattr(permissions, '_loaded', (permissions.policy(), ('/somewhere-else/',), permissions.pinned()))
     assert _answer(app, 'GET', '/api/export/counts', None) == 302
 
 
