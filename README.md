@@ -16,7 +16,7 @@ You need Docker with the Compose plugin.
 git clone <your-copy-of-this-repo> flask
 cd flask
 cp .env.example .env
-# Edit .env: at minimum set SCHOOL_NAME, SECRET_KEY, ADMIN_PASSWORD and DEFAULT_PASSWORD
+# Edit .env: at minimum set ORG_NAME, SECRET_KEY, ADMIN_PASSWORD and DEFAULT_PASSWORD
 docker compose up -d --build
 ```
 

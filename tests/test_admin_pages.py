@@ -39,3 +39,10 @@ def test_admin_passes_admin_checks(app):
 def test_user_table_shows_kit_role_labels(app):
     page = login(app, ADMIN).get('/users/table2').get_data(as_text=True)
     assert 'Teacher' in page and 'Student' in page  # education labels for Teacher / User
+
+
+def test_navbar_and_title_show_the_org_name(app):
+    page = login(app, None).get('/login').get_data(as_text=True)
+    name = app.config['ORG_NAME']
+    assert f'>{name}</a>' in page
+    assert f'<title>{name} | ' in page

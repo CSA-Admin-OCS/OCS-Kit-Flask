@@ -79,7 +79,7 @@ def inject_user():
 def inject_kit_config():
     # School branding for server-rendered admin pages (see .env.example)
     return dict(
-        school_name=app.config.get('SCHOOL_NAME'),
+        org_name=app.config.get('ORG_NAME'),
         school_logo=app.config.get('SCHOOL_LOGO_URL'),
         site_domain=app.config.get('SITE_DOMAIN'),
         frontend_url=app.config.get('FRONTEND_URL'),
