@@ -9,7 +9,7 @@ from flask_restful import Api, Resource # used for REST API building
 from datetime import datetime, timedelta
 from __init__ import app, db
 from api.authorize import token_required
-from model.user import User, delete_account, meets_password_rule, WeakPasswordError
+from model.user import User, delete_account, meets_password_rule, pick_organization, WeakPasswordError
 from model.github import GitHubUser
 import os
 
@@ -176,7 +176,7 @@ class UserAPI:
             if uid is None or len(uid) < 2:
                 return {'message': f'User ID is missing, or is less than 2 characters'}, 400
           
-            # validate email domain when the school restricts signups (ALLOWED_EMAIL_DOMAINS)
+            # validate email domain when the organization restricts signups (ALLOWED_EMAIL_DOMAINS)
             allowed_domains = current_app.config.get('ALLOWED_EMAIL_DOMAINS') or []
             email = body.get('email') or ''
             if allowed_domains:
@@ -210,8 +210,8 @@ class UserAPI:
             # Add optional fields if they exist
             if body.get('sid'):
                 cleaned_body['sid'] = body.get('sid')
-            if body.get('school'):
-                cleaned_body['school'] = body.get('school')
+            if pick_organization(body):
+                cleaned_body['organization'] = pick_organization(body)
             if body.get('kasm_server_needed') is not None:
                 cleaned_body['kasm_server_needed'] = body.get('kasm_server_needed')
             # Support assigning classes (e.g. ["CSSE","CSP","CSA"]).
@@ -690,58 +690,58 @@ class UserAPI:
             
             return jsonify({'message': 'AP exam data updated successfully', 'uid': user.uid, 'ap_exam': user.ap_exam})
 
-    class _School(Resource):
+    class _Organization(Resource):
         """
-        School data API operations
+        Organization data API operations. Also served at the old address /api/school.
         """
 
         @token_required()
         def get(self):
             """
-            Get the school data for a user.
+            Get the organization data for a user.
             """
             current_user = g.current_user
 
-            # If request includes a UID parameter and user is admin, get that user's school data
+            # If request includes a UID parameter and user is admin, get that user's organization data
             uid = request.args.get('uid')
             if current_user.is_admin() and uid:
                 user = User.query.filter_by(_uid=uid).first()
                 if not user:
                     return {'message': f'User {uid} not found'}, 404
             else:
-                user = current_user  # Get the current user's school data
+                user = current_user  # Get the current user's organization data
 
-            return jsonify({'uid': user.uid, 'school': user.school})
+            return jsonify({'uid': user.uid, 'organization': user.organization})
 
         @token_required()
         def post(self):
             """
-            Add or update school data for a user.
+            Add or update organization data for a user. Accepts "organization", or the old name "school".
             """
             current_user = g.current_user
             body = request.get_json()
 
-            # Determine which user's school data to update
+            # Determine which user's organization data to update
             uid = body.get('uid')
             if current_user.is_admin() and uid:
                 user = User.query.filter_by(_uid=uid).first()
                 if not user:
                     return {'message': f'User {uid} not found'}, 404
             else:
-                # Non-admins can only update their own school data
+                # Non-admins can only update their own organization data
                 if uid and uid != current_user.uid and not current_user.is_admin():
-                    return {'message': 'Permission denied: You can only update your own school data'}, 403
+                    return {'message': 'Permission denied: You can only update your own organization data'}, 403
                 user = current_user
 
-            # Get the school data from the request
-            school = body.get('school')
-            if not school:
-                return {'message': 'School data is missing'}, 400
+            # Get the organization data from the request
+            organization = pick_organization(body)
+            if not organization:
+                return {'message': 'Organization data is missing'}, 400
 
-            # Update the user's school data
-            user.update({'school': school})
+            # Update the user's organization data
+            user.update({'organization': organization})
 
-            return jsonify({'message': 'School data updated successfully', 'uid': user.uid, 'school': user.school})
+            return jsonify({'message': 'Organization data updated successfully', 'uid': user.uid, 'organization': user.organization})
 
     class _GuestCRUD(Resource):
         """
@@ -775,7 +775,7 @@ class UserAPI:
             name = f"Guest_{uid}"
             email = "?"
             sid = "?"
-            school = "?"
+            organization = "?"
 
             # Create User object with auto-generated name
             user_obj = User(name=name, uid=uid, password=password)
@@ -787,7 +787,7 @@ class UserAPI:
                 'password': password,
                 'email': email,
                 'sid': sid,
-                'school': school,
+                'organization': organization,
                 'kasm_server_needed': False
             }
             if body.get('class') is not None:
@@ -855,7 +855,7 @@ class UserAPI:
     api.add_resource(_Security, '/authenticate')
     api.add_resource(_GradeData, '/grade_data')
     api.add_resource(_APExam, '/apexam')
-    api.add_resource(_School, '/school')
+    api.add_resource(_Organization, '/organization', '/school')  # /school: the old address, kept for Pages and Spring
     api.add_resource(_ResetPasswordVerified, '/reset-password')
     
     class _Class(Resource):

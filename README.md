@@ -6,7 +6,7 @@ The Python/Flask backend of OCS-in-a-Kit. It provides:
 - A small admin UI (`templates/`, Jinja2) for managing users, sections and personas.
 - SQLAlchemy models (`model/`). SQLite by default (`instance/volumes/user_management.db`), with MySQL supported for production.
 
-All school-specific settings, such as your domain, CORS origins, seeded accounts and API keys, come from environment variables. See [`.env.example`](.env.example) for the full list.
+All organization-specific settings, such as your domain, CORS origins, seeded accounts and API keys, come from environment variables. See [`.env.example`](.env.example) for the full list.
 
 ## Quick start (Docker)
 
@@ -101,7 +101,7 @@ Deleting a user (`DELETE /api/user` with `{"uid": ...}`, or the Delete button on
 
 **Changing a level from the website.** An admin opens **Permissions** in the admin menu (`/permissions/`), where requests are grouped by feature. Pick a level for a request and press Save: the change is stored in the database (`permission_override`, with a log of who changed what in `permission_audit`) and applies on the next request in every worker, with no restart. **Reset** goes back to the level in `permissions.json`. The same is available as `GET`/`PUT /api/permissions` (admin only; `PUT` takes `{"requests": {"GET /api/study": "member", "GET /api/jokes": null}}`, where `null` resets). Things to know:
 
-- Requests under `pinned` in `permissions.json` (login and the Permissions page itself) cannot be changed, so nobody can lock themselves or everyone out.
+- Requests under `pinned` in `permissions.json` (login and the Permissions page itself) cannot be changed, so nobody can lock themselves or everyone out. The page shows them in red as locked, requests an admin has decided in green, and unreviewed ones in yellow.
 - The page can make any request stricter. It can make one more open only when the route does not check for itself: a route with its own `@token_required()` or role check keeps that check.
 - If the stored changes cannot be read, requests answer 503 rather than guess.
 - `scripts/db_init.py` wipes the changes along with the rest of the database.
@@ -174,6 +174,19 @@ curl -b jar -X PUT http://localhost:8587/api/kit/admin/features -H 'Content-Type
   -d '{"features": {"social": false}}'
 ```
 
+### Organizations (formerly "schools")
+
+OCS-in-a-Kit is for any organization, so what used to be called a school is now an organization everywhere:
+
+| Where | Name now | Still accepted (old name) |
+|-------|----------|---------------------------|
+| `.env` | `ORG_NAME`, `ORG_LOGO_URL` | `SCHOOL_NAME`, `SCHOOL_LOGO_URL` |
+| User JSON (`/api/id`, `/api/user`, ...) | `organization` | `school`, in requests, imports and exports |
+| Classroom JSON | `organization_name` | `school_name` and `schoolName`, in requests and imports |
+| Endpoint | `/api/organization` | `/api/school`, the same handler |
+
+Responses use only the new names. Requests, imports and old exports that still use the old names keep working, so Pages, Spring and existing backups need no change to keep running; update them at your own pace. The database columns keep their stored names (`users._school`, `classrooms._school_name`), so an existing database needs no migration.
+
 ### Adding a new feature
 
 All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
@@ -201,7 +214,7 @@ To add code to an existing feature, append to that feature's lists instead.
 1. In `.env`, set `IS_PRODUCTION=true`. The app then refuses to start without `SECRET_KEY`, `ADMIN_PASSWORD` and `DEFAULT_PASSWORD`, and it sends secure, cross-site cookies.
 2. Set `CORS_ORIGINS` to your frontend origin(s), e.g. `https://pages.example.org`.
 3. Set `COOKIE_DOMAIN` (e.g. `.example.org`) if the frontend and backend are on different subdomains.
-4. Optionally, set `ALLOWED_EMAIL_DOMAINS` to limit signups to your school's email domains.
+4. Optionally, set `ALLOWED_EMAIL_DOMAINS` to limit signups to your organization's email domains.
 5. Put nginx in front of the backend using [`deploy/nginx.conf.template`](deploy/nginx.conf.template). The instructions for filling it in with `envsubst` and getting a certificate with certbot are at the top of that file.
 6. To use MySQL instead of SQLite, set `DB_ENDPOINT`, `DB_USERNAME` and `DB_PASSWORD`. Set `DB_INIT=true` for the first boot only.
 

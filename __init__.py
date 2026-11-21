@@ -35,13 +35,14 @@ app.config['IS_PRODUCTION'] = IS_PRODUCTION
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-# Kit / school identity settings
+# Kit / organization identity settings
 # ORG_NAME is the name of your organization; SCHOOL_NAME is the old name of this setting, still read so existing .env files keep working
 app.config['ORG_NAME'] = os.environ.get('ORG_NAME') or os.environ.get('SCHOOL_NAME') or 'OCS Kit'
 app.config['SITE_DOMAIN'] = os.environ.get('SITE_DOMAIN') or None
 app.config['FRONTEND_URL'] = os.environ.get('FRONTEND_URL') or 'http://localhost:4500'
 # Optional branding for the server-rendered admin pages
-app.config['SCHOOL_LOGO_URL'] = os.environ.get('SCHOOL_LOGO_URL') or '/static/assets/kit_logo.svg'
+# SCHOOL_LOGO_URL is the old name of ORG_LOGO_URL, still read so existing .env files keep working
+app.config['ORG_LOGO_URL'] = os.environ.get('ORG_LOGO_URL') or os.environ.get('SCHOOL_LOGO_URL') or '/static/assets/kit_logo.svg'
 app.config['SOCIAL_GITHUB_URL'] = os.environ.get('SOCIAL_GITHUB_URL') or None
 app.config['SOCIAL_TWITTER_URL'] = os.environ.get('SOCIAL_TWITTER_URL') or None
 app.config['SOCIAL_YOUTUBE_URL'] = os.environ.get('SOCIAL_YOUTUBE_URL') or None

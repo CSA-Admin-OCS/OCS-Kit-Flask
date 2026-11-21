@@ -40,7 +40,7 @@ def _make_user(app, uid, owns_classroom=False):
         User(name=uid, uid=uid, password=PASSWORD).create()
         user = User.query.filter_by(_uid=uid).first()
         if owns_classroom:
-            Classroom(name='Owned', school_name='School', owner_teacher_id=user.id).create()
+            Classroom(name='Owned', organization_name='Organization', owner_teacher_id=user.id).create()
         return user.id
 
 

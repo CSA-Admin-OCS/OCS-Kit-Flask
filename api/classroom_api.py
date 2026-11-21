@@ -13,10 +13,10 @@ def get_all_classrooms():
     if current_user.is_admin():
         classrooms = Classroom.query.all()
     else:
-        user_school = current_user.school.strip()
+        user_organization = current_user.organization.strip()
         # Fetch all classrooms, then filter in Python (only for debugging)
         all_classrooms = Classroom.query.all()
-        classrooms = [c for c in all_classrooms if c.school_name.strip() == user_school]
+        classrooms = [c for c in all_classrooms if c.organization_name.strip() == user_organization]
     return jsonify([c.to_dict() for c in classrooms])
 
 
@@ -25,7 +25,7 @@ def get_all_classrooms():
 def get_classroom_by_id(id):
     classroom = Classroom.query.get_or_404(id)
     current_user = g.current_user
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
     return jsonify(classroom.to_dict())
 
@@ -43,7 +43,7 @@ def create_new_classroom():
 
     classroom = Classroom(
         name=name,
-        school_name=current_user.school,
+        organization_name=current_user.organization,
         owner_teacher_id=current_user.id
     )
     classroom.create()
@@ -56,7 +56,7 @@ def delete_classroom_by_id(id):
     current_user = g.current_user
     if not current_user.is_staff():
         return {"message": "Permission denied"}, 403
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     classroom.delete()
@@ -69,7 +69,7 @@ def update_classroom(id):
     current_user = g.current_user
     if not current_user.is_staff():
         return {"message": "Permission denied"}, 403
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     data = request.get_json()
@@ -85,7 +85,7 @@ def update_classroom(id):
 def list_students_in_classroom(id):
     classroom = Classroom.query.get_or_404(id)
     current_user = g.current_user
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     students = []
@@ -101,7 +101,7 @@ def list_students_in_classroom(id):
 def get_student_in_classroom(id, student_id):
     classroom = Classroom.query.get_or_404(id)
     current_user = g.current_user
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     student = User.query.get_or_404(student_id)
@@ -120,7 +120,7 @@ def add_student_to_classroom(id, student_id):
     current_user = g.current_user
     if not current_user.is_staff():
         return {"message": "Permission denied"}, 403
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     student = User.query.get_or_404(student_id)
@@ -141,7 +141,7 @@ def remove_student_from_classroom(id, student_id):
     current_user = g.current_user
     if not current_user.is_staff():
         return {"message": "Permission denied"}, 403
-    if not current_user.is_admin() and classroom.school_name != current_user.school:
+    if not current_user.is_admin() and classroom.organization_name != current_user.organization:
         return {"message": "Access denied"}, 403
 
     student = User.query.get_or_404(student_id)

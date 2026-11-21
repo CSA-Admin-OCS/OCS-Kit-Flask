@@ -77,10 +77,10 @@ def inject_user():
 
 @app.context_processor
 def inject_kit_config():
-    # School branding for server-rendered admin pages (see .env.example)
+    # Organization branding for server-rendered admin pages (see .env.example)
     return dict(
         org_name=app.config.get('ORG_NAME'),
-        school_logo=app.config.get('SCHOOL_LOGO_URL'),
+        org_logo=app.config.get('ORG_LOGO_URL'),
         site_domain=app.config.get('SITE_DOMAIN'),
         frontend_url=app.config.get('FRONTEND_URL'),
         social_github=app.config.get('SOCIAL_GITHUB_URL'),

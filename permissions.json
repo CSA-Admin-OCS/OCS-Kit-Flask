@@ -83,6 +83,8 @@
     "POST /api/microblog/reply",
     "GET /api/microblog/topics",
     "POST /api/microblog/topics/auto-create",
+    "GET /api/organization",
+    "POST /api/organization",
     "GET /api/persona",
     "GET /api/persona/<int:id>",
     "POST /api/post",

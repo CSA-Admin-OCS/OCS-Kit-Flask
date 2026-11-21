@@ -9,12 +9,18 @@ classroom_student = db.Table(
     db.Column('student_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
 )
 
+def pick_organization_name(data):
+    """The classroom's organization in a request or an export: "organization_name", else the old names
+    "school_name" and "schoolName" that Pages, Spring and older exports still send."""
+    return data.get('organization_name') or data.get('school_name') or data.get('schoolName')
+
+
 class Classroom(db.Model):
     __tablename__ = 'classrooms'
 
     id = db.Column(db.Integer, primary_key=True)
     _name = db.Column(db.String(255), nullable=False)
-    _school_name = db.Column(db.String(255), nullable=False)
+    _organization_name = db.Column('_school_name', db.String(255), nullable=False)  # column name kept for existing databases
     _owner_teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     _status = db.Column(db.String(50), default='active')
     _created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -27,9 +33,9 @@ class Classroom(db.Model):
         lazy='dynamic'
     )
 
-    def __init__(self, name, school_name, owner_teacher_id, status='active'):
+    def __init__(self, name, organization_name, owner_teacher_id, status='active'):
         self._name = name
-        self._school_name = school_name
+        self._organization_name = organization_name
         self._owner_teacher_id = owner_teacher_id
         self._status = status
 
@@ -39,9 +45,9 @@ class Classroom(db.Model):
     def name(self, val): self._name = val
 
     @property
-    def school_name(self): return self._school_name
-    @school_name.setter
-    def school_name(self, val): self._school_name = val
+    def organization_name(self): return self._organization_name
+    @organization_name.setter
+    def organization_name(self, val): self._organization_name = val
 
     @property
     def owner_teacher_id(self): return self._owner_teacher_id
@@ -80,7 +86,7 @@ class Classroom(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'school_name': self.school_name,
+            'organization_name': self.organization_name,
             'owner_teacher_id': self.owner_teacher_id,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,

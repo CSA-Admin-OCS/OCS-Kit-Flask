@@ -370,7 +370,7 @@ def load_sections(sections_data):
 
 
 def load_users(users_data):
-    from model.user import User, Section
+    from model.user import User, Section, pick_organization
 
     loaded = skipped = 0
     for user_data in users_data:
@@ -390,7 +390,7 @@ def load_users(users_data):
                 kasm_server_needed=user_data.get('kasm_server_needed', False),
                 grade_data=user_data.get('grade_data') or user_data.get('gradeData'),
                 ap_exam=user_data.get('ap_exam') or user_data.get('apExam'),
-                school=user_data.get('school'),
+                organization=pick_organization(user_data),
                 classes=user_data.get('class') or user_data.get('_class'),
                 game_profile=user_data.get('game_profile') or user_data.get('gameProfile'),
             )
@@ -564,7 +564,7 @@ def load_posts(posts_data, user_uid_map=None):
 
 
 def load_classrooms(classrooms_data, user_uid_map=None):
-    from model.classroom import Classroom
+    from model.classroom import Classroom, pick_organization_name
     from model.user import User
 
     loaded = skipped = 0
@@ -578,7 +578,7 @@ def load_classrooms(classrooms_data, user_uid_map=None):
 
             classroom = Classroom(
                 name=classroom_data.get('name'),
-                school_name=classroom_data.get('school_name') or classroom_data.get('schoolName'),
+                organization_name=pick_organization_name(classroom_data),
                 owner_teacher_id=owner.id,
                 status=classroom_data.get('status', 'active'),
             )

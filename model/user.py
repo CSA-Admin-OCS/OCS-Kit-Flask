@@ -153,6 +153,13 @@ class Section(db.Model):
         return None
 
 
+def pick_organization(data):
+    """The organization in a request or an export: "organization", else the old name "school" that Pages, Spring
+    and older exports still send. None when neither is given."""
+    value = data.get('organization')
+    return value if value is not None else data.get('school')
+
+
 class User(db.Model, UserMixin):
     """
     User Model
@@ -176,7 +183,8 @@ class User(db.Model, UserMixin):
         sections (Relationship): A many-to-many relationship between users and sections, allowing users to be associated with multiple sections.
         _grade_data (Column): A JSON object representing the user's grade data.
         _ap_exam (Column): A JSON object representing the user's AP exam data.
-        _school (Column): A string representing the user's school, defaults to "Unknown".
+        _organization (Column): A string naming the user's organization, defaults to "Unknown". Stored in the
+            column that was always called "_school", so existing databases need no migration.
     """
     __tablename__ = 'users'
 
@@ -192,7 +200,7 @@ class User(db.Model, UserMixin):
     _grade_data = db.Column(db.JSON, unique=False, nullable=True)
     _ap_exam = db.Column(db.JSON, unique=False, nullable=True)
     _class = db.Column(db.JSON, unique=False, nullable=True)
-    _school = db.Column(db.String(255), default="Unknown", nullable=True)
+    _organization = db.Column('_school', db.String(255), default="Unknown", nullable=True)  # column name kept for existing databases
     _game_profile = db.Column(db.JSON, unique=False, nullable=True)
     # Bumped every time the password actually changes (set_password). Embedded in issued
     # JWTs and in the Flask-Login session id (see get_id) and checked on every request, so
@@ -212,7 +220,7 @@ class User(db.Model, UserMixin):
     personas = db.relationship('Persona', secondary='user_personas', lazy='subquery',
                                overlaps="user_personas_rel,persona,users")
     
-    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role=None, pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None, game_profile=None):
+    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role=None, pfp='', grade_data=None, ap_exam=None, organization="Unknown", sid=None, classes=None, game_profile=None):
         self._name = name
         self._uid = uid
         self._email = "?"
@@ -226,7 +234,7 @@ class User(db.Model, UserMixin):
         # _class stores a list of class abbreviations the user belongs to (e.g. CSSE, CSP, CSA)
         # keep it as a JSON column in the DB
         self._class = classes if classes is not None else []
-        self._school = school
+        self._organization = organization
         self._game_profile = game_profile if game_profile else None
 
     # UserMixin/Flask-Login requires a get_id method to return the id as a string.
@@ -398,12 +406,12 @@ class User(db.Model, UserMixin):
         self._ap_exam = ap_exam if ap_exam is not None else {}
 
     @property
-    def school(self):
-        return self._school
+    def organization(self):
+        return self._organization
 
-    @school.setter
-    def school(self, school):
-        self._school = school
+    @organization.setter
+    def organization(self, organization):
+        self._organization = organization
 
     @property
     def game_profile(self):
@@ -527,7 +535,7 @@ class User(db.Model, UserMixin):
             "grade_data": self.grade_data,
             "ap_exam": self.ap_exam,
             "password": self._password,  # Only for internal use, not for API
-            "school": self.school,
+            "organization": self.organization,
             "game_profile": self.game_profile,
         }
         sections = self.read_sections()
@@ -552,7 +560,7 @@ class User(db.Model, UserMixin):
         grade_data = inputs.get("grade_data", None)
         ap_exam = inputs.get("ap_exam", None)
         class_list = inputs.get("class", None) or inputs.get("_class", None)
-        school = inputs.get("school", None)
+        organization = pick_organization(inputs)
         # States before update
         old_uid = self.uid
         old_kasm_server_needed = self.kasm_server_needed
@@ -584,8 +592,8 @@ class User(db.Model, UserMixin):
                 self._class = [class_list]
             else:
                 self._class = class_list
-        if school is not None:
-            self.school = school
+        if organization is not None:
+            self.organization = organization
         game_profile = inputs.get("game_profile", None)
         if game_profile is not None:
             self.game_profile = game_profile
