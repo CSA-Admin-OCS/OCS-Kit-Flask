@@ -69,6 +69,54 @@ Every kit has the same three roles: **admin** runs the site and is the only role
 | staff | Open the user list and sections admin pages; staff-only API actions (classrooms, grading summaries in production). Cannot change features. |
 | member | Use the enabled features and edit their own profile. Can see which features are on (`/api/kit`) but cannot change them. |
 
+Deleting a user (`DELETE /api/user` with `{"uid": ...}`, or the Delete button on the users page) is admin-only. An admin cannot delete their own account, and a user who still owns records such as posts or classrooms is kept and the answer is a 409 saying so, rather than a false "deleted". Kasm is told to remove the account only after it is really gone.
+
+### Permissions
+
+[`permissions.json`](permissions.json) is the one place that says who may make each request. It has one flat list per level, and each entry is `METHOD /route`, with the route written as Flask knows it:
+
+```json
+{
+  "public":     ["POST /api/authenticate", "GET /login"],
+  "member":     ["GET /api/id", "PUT /api/user"],
+  "staff":      ["POST /api/classrooms/"],
+  "admin":      ["GET /api/export/users", "DELETE /api/user"],
+  "unreviewed": ["GET /api/study"]
+}
+```
+
+| Level | Who may make the request |
+|-------|--------------------------|
+| `public` | Anyone, signed in or not, on purpose (home page, login, sign-up) |
+| `member` | Any signed-in account |
+| `staff` | Staff and admin |
+| `admin` | Admin only |
+| `unreviewed` | Anyone, because it always was open and nobody has decided it should be. It is a to-do list: move each entry to the level it belongs at. |
+
+- **Levels add up.** Admin may make everything staff may, and staff everything a member may. The file uses the three role ids, never the stored names, so changing the kit never touches it.
+- **A route in no list is closed.** It is refused for everyone with a 403 that names the entry to add, so a new route is never open by accident.
+- **Same in development and production.** There is no mode switch.
+- **Answers.** No login on an API path gets 401 JSON, and too low a level gets 403. An admin page without a login session is sent to `/login`. API requests may use the session or the JWT; pages use the session only. `api_paths` in the file lists which path prefixes are APIs (`/api/`, `/run/`).
+- **Rules about one record stay in the route.** "You may only change your own profile" needs the record, so it is still written there. A route that reads `g.current_user` still needs `@token_required()`. For who may reach the route at all, you only edit the file. A decorator that asks for more than the file still applies.
+
+**Changing a level from the website.** An admin opens **Permissions** in the admin menu (`/permissions/`), where requests are grouped by feature. Pick a level for a request and press Save: the change is stored in the database (`permission_override`, with a log of who changed what in `permission_audit`) and applies on the next request in every worker, with no restart. **Reset** goes back to the level in `permissions.json`. The same is available as `GET`/`PUT /api/permissions` (admin only; `PUT` takes `{"requests": {"GET /api/study": "member", "GET /api/jokes": null}}`, where `null` resets). Things to know:
+
+- Requests under `pinned` in `permissions.json` (login and the Permissions page itself) cannot be changed, so nobody can lock themselves or everyone out.
+- The page can make any request stricter. It can make one more open only when the route does not check for itself: a route with its own `@token_required()` or role check keeps that check.
+- If the stored changes cannot be read, requests answer 503 rather than guess.
+- `scripts/db_init.py` wipes the changes along with the rest of the database.
+
+To add a route, put it under the right level and run:
+
+```bash
+python -m permissions --check   # the file against the app's routes; exits 1 on a problem
+python -m permissions           # entries per level, and the unreviewed list
+```
+
+`python -m pytest tests` runs the same check, so a route missing from the file fails the tests, and the app logs a warning at startup.
+
+**Upgrading a copy that has its own routes.** Accounts, roles and logins are unchanged, but a route of your own is in no list, so it is refused until you add it. Run `python -m permissions --check`, put each route it names under `unreviewed` to keep it exactly as open as it is today, deploy, then move each one to its real level when you have decided. The Gemini endpoints now need a login in development too, as they already did in production.
+
 ### Customizing features
 
 An admin can [apply a whole kit at runtime](#switching-kits-at-runtime), which replaces the first two layers below. Otherwise features are decided in three layers, and each later layer wins:
@@ -131,7 +179,7 @@ curl -b jar -X PUT http://localhost:8587/api/kit/admin/features -H 'Content-Type
 All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
 
 1. Add the feature to the canonical `OCS-Kit/kits/catalog.json`: id, name, category, labels, description and `setup` guide. Add it to the kit presets that should include it. Copy everything except the `flask` blocks verbatim into this repo's `kits/catalog.json`.
-2. Write the code: a blueprint in `api/`, and any models in `model/`. For role checks, use `roles.py` or `user.is_admin()`/`is_staff()` instead of role names.
+2. Write the code: a blueprint in `api/`, and any models in `model/`. Add each route to [`permissions.json`](#permissions) at the level that may use it (a route in no list is refused). For role checks inside a route, use `roles.py` or `user.is_admin()`/`is_staff()` instead of role names.
 3. In this repo's catalog, under the feature's `"flask"` block, list:
    - `blueprints`: `"api.my_api:my_api"`. Requests return 404 while the feature is off. Each blueprint has exactly one owning feature.
    - `uses_blueprints` (optional): blueprints owned by another feature that this feature also needs. They are served when either feature is on.
@@ -139,7 +187,7 @@ All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and 
    - `seed`: `"model.my_model:initMyThings"`. These run from `db_init.py`, and when an admin turns the feature on while its tables are empty.
    - `startup` (optional): functions that run at app start and when the feature is turned on.
    - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar.
-4. Run `python -m features --check` and `python -m pytest tests`. The check fails on:
+4. Run `python -m features --check`, `python -m permissions --check` and `python -m pytest tests`. The features check fails on:
    - unknown ids, categories or labels, and kit roles that don't match the canonical ones
    - references that don't import
    - a blueprint claimed by two features
@@ -196,6 +244,8 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
 | `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
 | `roles.py` | Role names and per-kit labels from the catalog |
+| `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
+| `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
 | `model/feature_override.py` | Admin feature overrides and their audit log |
 | `__init__.py` | Flask app, configuration from environment, database setup |
 | `api/` | REST API blueprints |
