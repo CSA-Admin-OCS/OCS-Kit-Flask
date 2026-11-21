@@ -73,14 +73,15 @@ GITHUB_ISSUE_URL_RE = re.compile(r'^https?://github\.com/([^/]+)/([^/]+)/(issues
 GOOGLE_DOC_URL_RE = re.compile(r'^https?://docs\.google\.com/document/d/([a-zA-Z0-9_-]+)')
 
 # =============================================================================
-# AUTH DECORATOR (DEV-ONLY BYPASS)
+# AUTH DECORATORS
 # =============================================================================
+# Who may call each endpoint is decided before the route runs, in every mode, by
+# permissions.json. These two add the same check again in production, as defence in depth.
 
 def require_auth_if_production(f):
     """
-    Dev-only bypass: require auth only in production.
-    In development (IS_PRODUCTION not set), endpoints are public.
-    In production, endpoints require token_required() authentication.
+    In production, also require token_required() authentication (permissions.json already
+    requires a signed-in account for this endpoint in every mode).
     """
     is_production = os.environ.get('IS_PRODUCTION', 'false').lower() == 'true'
     if is_production:
@@ -89,10 +90,9 @@ def require_auth_if_production(f):
 
 def require_admin_if_production(f):
     """
-    Dev-only bypass: require Admin/Teacher role only in production.
-    In development (IS_PRODUCTION not set), endpoints are public.
-    In production, endpoints require an Admin or Teacher role (mirrors the
-    admin/teacher gate on grading submissions in the Spring backend).
+    In production, also require an Admin or Teacher role (mirrors the admin/teacher gate on
+    grading submissions in the Spring backend). permissions.json already requires staff for
+    this endpoint in every mode.
     """
     is_production = os.environ.get('IS_PRODUCTION', 'false').lower() == 'true'
     if is_production:

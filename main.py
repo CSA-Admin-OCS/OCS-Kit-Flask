@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from __init__ import app, db, login_manager  # Key Flask objects 
 import features  # kit feature registry; kits/catalog.json says what belongs to each feature
 import roles  # role names and per-kit labels from kits/catalog.json
+import permissions  # who may make each request, from permissions.json
 from api.authorize import admin_page_required, staff_page_required
 
 # Models: every feature's models are imported whatever the kit, so all tables and
@@ -189,7 +190,10 @@ def update_user(uid):
 
 
 
-    
+# Check every request against permissions.json. Last, so every route exists, and after the feature
+# gate above, so a disabled feature still answers 404 before anything else.
+permissions.init_app(app)
+
 # Create an AppGroup for custom commands
 custom_cli = AppGroup('custom', help='Custom commands')
 
