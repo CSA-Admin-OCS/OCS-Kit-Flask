@@ -60,6 +60,14 @@ code { color: var(--code); }
 .btn-outline-danger { color: #b02a37; border-color: #b02a37; }
 .btn-outline-danger:hover { background-color: #b02a37; border-color: #b02a37; color: #fff; }
 
+/* ---- the logo banner: the colour of the card it is in, with the logo made for the theme ---------------------------- */
+.brand-banner { background-color: var(--surface); text-align: center; padding: 1.5rem 1rem; }
+.brand-banner.border { border-color: var(--border) !important; }
+.brand-banner img { max-width: 100%; height: auto; }
+.brand-logo-dark { display: none; }
+[data-theme="dark"] .brand-logo-light { display: none; }
+[data-theme="dark"] .brand-logo-dark { display: inline-block; }
+
 /* ---- the navbar, in both themes ---------------------------------------------------------------------------------- */
 .navbar.bg-secondary { background-color: var(--nav-bg) !important; border-bottom: 1px solid var(--border); }
 .navbar-light .navbar-brand, .navbar-light .navbar-brand:hover { color: var(--text); }

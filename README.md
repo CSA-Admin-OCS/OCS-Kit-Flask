@@ -1,4 +1,4 @@
-<p align="center"><img src="static/assets/ocs_backend_logo.png" alt="OCS-in-a-Kit Backend" width="460"></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="static/assets/ocs_backend_logo_dark.png"><img src="static/assets/ocs_backend_logo.png" alt="OCS-in-a-Kit Backend" width="460"></picture></p>
 
 # OCS Kit - Flask Backend
 
@@ -289,7 +289,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
 | `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
 | `roles.py` | Role names and per-kit labels from the catalog |
-| `branding/`, `scripts/make_logo_assets.py` | The source logo (on white) and the one-off script that makes the transparent web logos in `static/assets/` from it (needs Pillow and numpy; the PNGs are committed) |
+| `branding/`, `scripts/make_logo_assets.py` | The two source logos (one for light pages, one for dark) and the one-off script that makes the transparent web logos in `static/assets/` from them (needs Pillow and numpy; the PNGs are committed) |
 | `static/css/theme.css`, `templates/layouts/` | The light and dark colours, and the layout pieces: the navbar holds the sun/moon switch, and `base.html` sets the theme before the page paints and restarts the animated background with the theme's colours |
 | `templates/help.html` | The Q&A guide at `/help/`; a feature with a blueprint of its own needs a section here (a test checks) |
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
