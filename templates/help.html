@@ -62,11 +62,13 @@ curl -b jar {{ api_base }}/api/id</code></pre>
         invalidates your token cookie.</p>
         {% endcall %}
         {% call qa("What are the roles?") %}
-        <p>Every account has one of three roles. This kit calls them
-        <b>{{ kit.roles.admin.label }}</b> (runs the site and is the only one who can change features, permissions and CORS),
+        <p>Every account has one role. Three are built in, and this kit calls them
+        <b>{{ kit.roles.admin.label }}</b> (runs the site and is the only one who can change features, permissions, CORS and roles),
         <b>{{ kit.roles.staff.label }}</b> (day-to-day work: sections, classrooms, grading, approvals) and
         <b>{{ kit.roles.member.label }}</b> (a regular user). New sign-ups get <b>{{ kit.roles[kit.signup_role].label }}</b>.
-        A higher role can do everything a lower one can.</p>
+        {% if kit.custom_roles %}Admins have added {% for role in kit.custom_roles %}<b>{{ role.label }}</b> (L{{ role.tier }}){% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}</p>
+        <p class="mb-0">Every role has a <b>tier</b> from L1 (strongest) to L4 (weakest) that says how much it may do; the built-in roles start
+        at L1, L2 and L3. A stronger role can do everything a weaker one can.</p>
         {% endcall %}
         {% call qa("What makes a good password?") %}
         <p class="mb-0">At least 8 characters with an uppercase letter, a lowercase letter, a number and one of
@@ -164,6 +166,26 @@ curl -b jar -X PUT {{ api_base }}/api/kit/admin/kit -H 'Content-Type: applicatio
         the level in <code>permissions.json</code>. A route with its own check in code keeps that check, so the page can always make
         something stricter, but can only make it more open where the code has no check of its own.</p>
         {% endcall %}
+        {% call qa("What are tiers (L1 to L4), and how do I add a role?") %}
+        <p>A <b>tier</b> is a role's default permissions: how far up the permission levels it reaches.</p>
+        <ul>
+            <li><b>L1</b>: everything, like the admin role</li>
+            <li><b>L2</b>: the {{ kit.roles.staff.label }} level (day-to-day work)</li>
+            <li><b>L3</b>: the {{ kit.roles.member.label }} level (what any signed-in account may do)</li>
+            <li><b>L4</b>: public level only, no more than someone who is not signed in</li>
+        </ul>
+        <p>In the <b>Data</b> menu, under <b>Web Security</b>, open <a href="{{ url_for('roles_admin.page') }}">Roles</a>. Type a name
+        (2 to 20 characters), pick a tier and press Add role. You can also rename any role, change the tier of
+        {{ kit.roles.staff.label }} or {{ kit.roles.member.label }}, and see how many requests each tier may make. The admin role is
+        always L1 and cannot be removed. Everything follows the tier at once: the permission check, the pages and the code that asks
+        whether someone is staff or admin.</p>
+        <p class="mb-0">A tier is only the starting point. To change what a level may do for one request, use the Permissions page.</p>
+        {% endcall %}
+        {% call qa("How do I give someone a role?") %}
+        <p class="mb-0">On the Roles page, use <b>Give an account a role</b>: type the account's uid, pick the role and press Assign. From code:
+        <code>PUT /api/user/role</code> with <code>{"uid": "ada", "role": "Mentor"}</code>. You cannot change your own role, so the admins can
+        never be locked out, and a role that accounts still hold cannot be deleted until they have another.</p>
+        {% endcall %}
         {% call qa("I added a route and it answers 403 saying it is not in permissions.json.") %}
         <p class="mb-0">A request in no list is refused for everyone, so a new route is never open by accident. Add it to
         <code>permissions.json</code> under the level that should use it, then run <code>python -m permissions --check</code>.</p>
@@ -177,7 +199,7 @@ curl -b jar -X PUT {{ api_base }}/api/kit/admin/kit -H 'Content-Type: applicatio
         <b>Reset</b> forgets your list so the <code>CORS_ORIGINS</code> setting in <code>.env</code> decides again.</p>
         {% endcall %}
         {% call qa("Who changed a setting, and when?") %}
-        <p class="mb-0">Both pages end with <b>Recent changes</b>, a log of who changed what. Feature changes are in
+        <p class="mb-0">The Permissions, CORS and Roles pages each end with <b>Recent changes</b>, a log of who changed what. Feature changes are in
         <code>GET /api/kit/admin</code> under <code>recent_changes</code>.</p>
         {% endcall %}
     {% endcall %}

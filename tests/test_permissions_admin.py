@@ -31,7 +31,7 @@ def test_payload_lists_every_request_by_feature(app):
     payload = login(app, ADMIN).get(API).get_json()
     assert payload['levels'] == ['public', 'member', 'staff', 'admin']
     # the education kit under test calls the three roles Student, Teacher and Admin
-    assert payload['level_labels'] == {'public': 'Public', 'member': 'Student', 'staff': 'Teacher', 'admin': 'Admin'}
+    assert payload['level_labels'] == {'public': 'Public (L4)', 'member': 'Student (L3)', 'staff': 'Teacher (L2)', 'admin': 'Admin (L1)'}
     assert {f['id'] for f in payload['features']} >= {'core'}
     row = _row(payload, OPEN_ROUTE)
     assert row['file_level'] == row['level'] == 'unreviewed' and not row['overridden'] and not row['pinned']

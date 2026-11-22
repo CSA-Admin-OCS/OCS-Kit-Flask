@@ -57,6 +57,7 @@ def _no_overrides(request):
     flask_app = request.getfixturevalue('app')
     from model.feature_override import FeatureOverride, KitSetting
     from model.cors_setting import CorsAudit, CorsSetting
+    from model.role_setting import RoleAudit, RoleSetting
     from model.permission_override import PermissionAudit, PermissionOverride
     from __init__ import db
 
@@ -68,6 +69,8 @@ def _no_overrides(request):
             PermissionAudit.query.delete()
             CorsSetting.query.delete()
             CorsAudit.query.delete()
+            RoleSetting.query.delete()
+            RoleAudit.query.delete()
             db.session.commit()
     clear()
     yield

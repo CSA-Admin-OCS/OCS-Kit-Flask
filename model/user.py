@@ -341,15 +341,15 @@ class User(db.Model, UserMixin):
         self._role = role
 
     def is_admin(self):
-        return self._role == roles.admin_role()
+        return roles.at_least(self._role, 'admin')  # L1
 
     def is_teacher(self):
         """Staff role (stored as 'Teacher'; labelled per kit, e.g. 'Manager')."""
-        return self._role == roles.staff_role()
+        return roles.tier_of(self._role) == roles.SEAT_TIER['staff']  # exactly L2
 
     def is_staff(self):
         """Staff or admin."""
-        return self._role in roles.staff_roles()
+        return roles.at_least(self._role, 'staff')  # L2 or L1
 
     @property
     def role_label(self):

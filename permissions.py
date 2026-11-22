@@ -11,7 +11,9 @@ as Flask knows it, e.g. "GET /api/id" or "DELETE /api/classrooms/<int:id>") and 
                  to-do list: move each entry to the level it belongs at. `python -m permissions` prints it.
 
 The levels rise in trust, so a role may make everything at or below its own level. The three role levels are the
-canonical role ids in roles.py; their stored names and labels differ per kit and never appear here.
+canonical role ids in roles.py; their stored names and labels differ per kit and never appear here. Which level a
+role reaches comes from its tier: L1 reaches admin, L2 staff, L3 member and L4 only public (roles.py, and the Roles
+page where admins add roles and choose tiers).
 
 A request in no list is refused for everyone, with a message that says what to add. So a new route is closed
 until someone decides who may use it, never open by accident. `python -m permissions --check` and the tests fail
@@ -46,7 +48,6 @@ ROLE_LEVELS = tuple(reversed(roles.ROLE_IDS))  # lowest trust first: member, sta
 LEVELS = (PUBLIC,) + ROLE_LEVELS
 LISTS = LEVELS + (UNREVIEWED,)
 SETTINGS = ('api_paths', 'pinned')
-LOWEST_ROLE = ROLE_LEVELS[0]  # what a stored role outside the kit's three counts as
 RANK = {PUBLIC: 0, UNREVIEWED: 0}
 RANK.update({role: number for number, role in enumerate(ROLE_LEVELS, start=1)})
 
@@ -132,11 +133,11 @@ def effective_level(method, rule):
 
 
 def caller_rank(user):
-    """How much a caller is trusted: 0 for no account, else 1 for a member up to the highest role. A stored role
-    outside the kit's three counts as the lowest role, as it always did."""
+    """How much a caller is trusted on the permission levels: 0 for no account, else 3 for an L1 role down to 0
+    for an L4 role, from the role's tier (roles.py)."""
     if user is None:
         return 0
-    return RANK[roles.role_id(user.role) or LOWEST_ROLE]
+    return roles.rank(user.role)
 
 
 ERROR_NAMES = {401: 'Unauthorized', 403: 'Forbidden', 503: 'Service Unavailable'}

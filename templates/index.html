@@ -44,12 +44,13 @@
         </div>
         <div class="col-md-6 col-xl-3">
             <div class="card h-100"><div class="card-body">
-                <h5 class="card-title">Three roles</h5>
-                <p class="card-text">Every account is a
+                <h5 class="card-title">Roles and tiers</h5>
+                <p class="card-text">Every account has a role: the built-in
                     <strong>{{ kit.roles.admin.label }}</strong> (runs the site),
-                    a <strong>{{ kit.roles.staff.label }}</strong> (day-to-day work) or
-                    a <strong>{{ kit.roles.member.label }}</strong> (everyone else, and the role new sign-ups get:
-                    {{ kit.roles[kit.signup_role].label }}).</p>
+                    <strong>{{ kit.roles.staff.label }}</strong> (day-to-day work) and
+                    <strong>{{ kit.roles.member.label }}</strong> (everyone else, and the role new sign-ups get:
+                    {{ kit.roles[kit.signup_role].label }}){% for role in kit.custom_roles %}, <strong>{{ role.label }}</strong>{% endfor %}.
+                    Each has a tier, L1 (strongest) to L4 (weakest), that sets its default permissions.</p>
             </div></div>
         </div>
         <div class="col-md-6 col-xl-3">

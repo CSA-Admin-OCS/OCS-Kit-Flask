@@ -72,6 +72,26 @@ Every kit has the same three roles: **admin** runs the site and is the only role
 
 Deleting a user (`DELETE /api/user` with `{"uid": ...}`, or the Delete button on the users page) is admin-only. An admin cannot delete their own account, and a user who still owns records such as posts or classrooms is kept and the answer is a 409 saying so, rather than a false "deleted".
 
+### Roles and tiers
+
+Every role has a **tier** from L1 (strongest) to L4 (weakest). A tier is the role's default permissions: how far up the permission levels it reaches.
+
+| Tier | Reaches | The built-in role that starts there |
+|------|---------|-------------------------------------|
+| L1 | everything (the admin level) | admin |
+| L2 | the staff level | staff |
+| L3 | the member level | member |
+| L4 | the public level only: no more than someone who is not signed in | none |
+
+Admins manage roles on the **Roles** page (admin menu, Web Security, `/roles/`), with no restart:
+
+- **Add a role** with a name (2 to 20 characters, stored on accounts), an optional label and a tier. Change any role's label, and the tier of staff and member. The admin role is always L1 and cannot be removed. **Reset** puts a built-in role back to its tier and label. A role that accounts still hold cannot be deleted.
+- **Give an account a role** with `PUT /api/user/role` and `{"uid": "ada", "role": "Mentor"}`, or from the page. You cannot change your own role, so the admins can never be locked out.
+- **Everything follows the tier.** The check before each request, the `@token_required(...)` decorators, the admin pages, and `is_admin()` / `is_staff()` all ask the role's tier, so a role added at L2 really has staff powers. A decorator's built-in role name means its level or stronger.
+- **Customizing.** The tier is only the default. Change what a level may do for one request on the [Permissions](#permissions) page. The page shows how many requests each tier may make right now.
+- **API.** `GET /api/roles`, `POST /api/roles` with `{"name": "Mentor", "label": "Mentor", "tier": 3}`, `PUT /api/roles/<name>` with a `label` and/or `tier`, and `DELETE /api/roles/<name>`. Admin only and pinned in `permissions.json`, and every change is logged with who made it. `GET /api/kit` also reports `role_tiers` (the built-in roles' tiers) and `custom_roles`.
+- **If the saved roles cannot be read**, the admin role keeps its power and every other role counts as L4 until they can, rather than guess.
+
 ### Permissions
 
 [`permissions.json`](permissions.json) is the one place that says who may make each request. It has one flat list per level, and each entry is `METHOD /route`, with the route written as Flask knows it:
@@ -168,7 +188,7 @@ Pages, Spring and the installer share this contract.
 
 | Request | Who | Returns |
 |---------|-----|---------|
-| `GET /api/kit` | anyone | `{kit, kit_name, kit_source: admin\|env\|default, customized, degraded, features: [ids], feature_details: [{id, name, category, labels, enabled}], roles: {admin\|staff\|member: {label}}, signup_role}` |
+| `GET /api/kit` | anyone | `{kit, kit_name, kit_source: admin\|env\|default, customized, degraded, features: [ids], feature_details: [{id, name, category, labels, enabled}], roles: {admin\|staff\|member: {label}}, role_tiers: {admin\|staff\|member: 1..4}, custom_roles: [{name, label, tier}], signup_role}` |
 | `GET /api/kit/admin` | admin | The same, plus `base_features` (before overrides), `presets` (`{vanilla\|education\|business: {name, description, features, roles}}`), `degraded_reason`, `recent_changes` (audit log), and for each feature: `source` (`kit` \| `env` \| `admin`), `override`, `always_on`, `setup` (`summary`, `steps`, `verify`, and the settings Flask reads, each with `configured: true/false`) and `ready` (all required Flask settings configured). Setting values are never returned. |
 | `PUT /api/kit/admin/features` | admin | Body `{"features": {"social": true, "kasm": false}}`. Rejects unknown ids and disabling `core` with 400. Returns the admin payload. |
 | `DELETE /api/kit/admin/features/<id>` | admin | Clears that override, so the kit decides again. Returns the admin payload. |
@@ -271,6 +291,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
 | `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
 | `cors.py`, `api/cors_admin.py`, `templates/cors.html`, `model/cors_setting.py` | The CORS headers, the admin CORS page and API, and the origins admins saved |
+| `api/roles_admin.py`, `templates/roles.html`, `model/role_setting.py` | The Roles page and API, and the roles and tiers admins saved (tiers are decided in `roles.py`) |
 | `model/feature_override.py` | Admin feature overrides and their audit log |
 | `__init__.py` | Flask app, configuration from environment, database setup |
 | `api/` | REST API blueprints |

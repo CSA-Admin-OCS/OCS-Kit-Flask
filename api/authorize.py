@@ -94,7 +94,7 @@ def auth_required(roles=None):
 
             if roles:
                 required_roles = list(roles) if isinstance(roles, (list, tuple)) else [roles]
-                if user.role not in required_roles:
+                if not role_config.meets(user.role, required_roles):
                     return {
                         "message": f"Insufficient permissions. Required roles: {', '.join(required_roles)}",
                         "data": None,
@@ -129,7 +129,7 @@ def page_roles_required(allowed):
         @wraps(view)
         @login_required
         def wrapper(*args, **kwargs):
-            if current_user.role not in allowed():
+            if not role_config.meets(current_user.role, allowed()):
                 abort(403)
             return view(*args, **kwargs)
         return wrapper

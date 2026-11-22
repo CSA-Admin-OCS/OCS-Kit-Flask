@@ -3,7 +3,6 @@ MicroBlog API
 Handles CRUD operations for micro blog posts, replies, reactions, and topics
 """
 from flask import Blueprint, request, jsonify, g
-import roles
 from flask_restful import Api, Resource
 from api.authorize import token_required
 from model.microblog import MicroBlog, Topic
@@ -128,7 +127,7 @@ class MicroBlogAPI:
                return {'message': 'MicroBlog post not found'}, 404
           
            # Check if user owns the post or is admin
-           if microblog._user_id != current_user.id and getattr(current_user, 'role', None) != roles.admin_role():
+           if microblog._user_id != current_user.id and not current_user.is_admin():
                return {'message': 'Permission denied'}, 403
           
            try:
@@ -162,7 +161,7 @@ class MicroBlogAPI:
                return {'message': 'MicroBlog post not found'}, 404
           
            # Check if user owns the post or is admin
-           if microblog._user_id != current_user.id and getattr(current_user, 'role', None) != roles.admin_role():
+           if microblog._user_id != current_user.id and not current_user.is_admin():
                return {'message': 'Permission denied'}, 403
           
            try:
@@ -339,7 +338,7 @@ class TopicAPI:
            """Create a new topic for a page (Admin only)"""
            current_user = g.current_user
           
-           if getattr(current_user, 'role', None) != roles.admin_role():
+           if not current_user.is_admin():
                return {'message': 'Permission denied. Admin access required.'}, 403
           
            body = request.get_json()
@@ -432,7 +431,7 @@ class TopicAPI:
            """Update topic settings (Admin only)"""
            current_user = g.current_user
           
-           if getattr(current_user, 'role', None) != roles.admin_role():
+           if not current_user.is_admin():
                return {'message': 'Permission denied. Admin access required.'}, 403
           
            body = request.get_json()

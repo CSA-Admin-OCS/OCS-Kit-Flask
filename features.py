@@ -306,6 +306,9 @@ def kit_info():
             for fid, f in catalog['features'].items()
         ],
         'roles': roles.public_roles(),
+        # tiers (1 = L1 strongest .. 4 = L4 weakest) of the built-in roles, and the roles admins added
+        'role_tiers': {rid: roles.tier_of(roles.flask_role(rid)) for rid in roles.ROLE_IDS},
+        'custom_roles': [{'name': r['name'], 'label': r['label'], 'tier': r['tier']} for r in roles.all_roles() if not r['builtin']],
         'signup_role': roles.kit_config()['signup_role'],
     }
 

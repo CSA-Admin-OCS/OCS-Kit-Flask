@@ -1,0 +1,207 @@
+{% extends "layouts/base.html" %}
+{% set project = "Roles" %}
+
+{% block body %}
+<div class="container mt-5 mb-5">
+    <h1>Roles</h1>
+    <p class="text-muted">
+        Every account has one role, and every role has a <b>tier</b> from <b>L1</b> (strongest) to <b>L4</b>
+        (weakest). The tier is the role's default permissions: it says how far up the permission levels the role
+        reaches. You can change what a level may do, request by request, on the
+        <a href="{{ url_for('permissions_admin.page') }}">Permissions</a> page. Changes here apply on the next request.
+    </p>
+    <div id="status" class="alert d-none" role="alert"></div>
+
+    <div id="tiers" class="row g-3 mb-4"></div>
+
+    <div class="card mb-4">
+        <div class="card-header">Roles</div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead><tr><th>Role</th><th>Shown as</th><th style="width: 12rem">Tier</th><th>Accounts</th><th></th></tr></thead>
+                <tbody id="rows"></tbody>
+            </table>
+        </div>
+        <div class="card-body border-top">
+            <form id="add" class="row g-2 align-items-end">
+                <div class="col-md-3"><label class="form-label small mb-1" for="newName">New role (stored name)</label>
+                    <input id="newName" class="form-control" maxlength="20" placeholder="Mentor" autocomplete="off"></div>
+                <div class="col-md-4"><label class="form-label small mb-1" for="newLabel">Shown as (optional)</label>
+                    <input id="newLabel" class="form-control" maxlength="40" placeholder="same as the name" autocomplete="off"></div>
+                <div class="col-md-3"><label class="form-label small mb-1" for="newTier">Tier</label>
+                    <select id="newTier" class="form-select"></select></div>
+                <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Add role</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Give an account a role</div>
+        <div class="card-body">
+            <form id="assign" class="row g-2 align-items-end">
+                <div class="col-md-5"><label class="form-label small mb-1" for="assignUid">Account (uid)</label>
+                    <input id="assignUid" class="form-control" placeholder="ada" autocomplete="off"></div>
+                <div class="col-md-5"><label class="form-label small mb-1" for="assignRole">Role</label>
+                    <select id="assignRole" class="form-select"></select></div>
+                <div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit">Assign</button></div>
+            </form>
+            <p class="small text-muted mt-2 mb-0">You cannot change your own role. Ask another admin, so the admins can never be locked out.</p>
+        </div>
+    </div>
+
+    <h2 class="h5">Recent changes</h2>
+    <ul id="changes" class="list-unstyled small"></ul>
+</div>
+
+<script>
+(function () {
+    const api = "{{ url_for('roles_admin.get_roles') }}";
+    const assignApi = "{{ url_for('roles_admin.put_user_role') }}";
+    let data = null;
+
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, text, cls) => {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (cls) node.className = cls;
+        return node;
+    };
+    const say = (message, kind) => {
+        const box = $("status");
+        box.textContent = message;
+        box.className = "alert alert-" + kind;
+    };
+    const tierName = (tier) => "L" + tier;
+    const tierOptions = (select, chosen) => {
+        select.replaceChildren();
+        for (const tier of data.tiers) {
+            const option = el("option", `${tierName(tier.tier)}: ${tier.level_label} level`);
+            option.value = tier.tier;
+            option.selected = tier.tier === chosen;
+            select.append(option);
+        }
+    };
+
+    async function call(method, url, payload) {
+        const response = await fetch(url, {
+            method, headers: { "Content-Type": "application/json" },
+            body: payload ? JSON.stringify(payload) : undefined,
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || "Request failed (" + response.status + ")");
+        return body;
+    }
+    async function change(method, url, payload, done) {
+        try {
+            const body = await call(method, url, payload);
+            if (url !== assignApi) { data = body; render(); }
+            say(done, "success");
+        } catch (error) {
+            say(error.message, "danger");
+            if (data) render();    // put the controls back to what is saved
+        }
+    }
+
+    function render() {
+        // the four tiers
+        const tiers = $("tiers");
+        tiers.replaceChildren();
+        for (const tier of data.tiers) {
+            const col = el("div", undefined, "col-md-6 col-xl-3");
+            const card = el("div", undefined, "card h-100");
+            const body = el("div", undefined, "card-body");
+            const title = el("h5", tierName(tier.tier) + (tier.tier === 1 ? ", strongest" : tier.tier === data.tiers.length ? ", weakest" : ""), "card-title");
+            body.append(title, el("p", tier.meaning, "card-text small"),
+                el("p", `Reaches the ${tier.level_label} level: ${tier.may_make} of ${tier.of} requests.`, "card-text small text-muted mb-1"));
+            const holders = data.roles.filter((role) => role.tier === tier.tier).map((role) => role.label);
+            body.append(el("p", holders.length ? "Roles: " + holders.join(", ") : "No role at this tier.", "card-text small mb-0"));
+            card.append(body); col.append(card); tiers.append(col);
+        }
+
+        // the roles
+        const rows = $("rows");
+        rows.replaceChildren();
+        for (const role of data.roles) {
+            const tr = el("tr");
+            const name = el("td"); name.append(el("code", role.name));
+            if (role.locked) name.append(el("span", "always L1", "badge bg-danger ms-2"));
+            else if (role.custom) name.append(el("span", "added", "badge bg-info text-dark ms-2"));
+            if (role.name === data.signup_role) name.append(el("span", "new sign-ups", "badge bg-secondary ms-2"));
+            const shown = el("td");
+            const label = el("input", undefined, "form-control form-control-sm");
+            label.value = role.label; label.maxLength = 40;
+            label.addEventListener("change", () => change("PUT", `${api}/${encodeURIComponent(role.name)}`, { label: label.value }, `Saved the label for ${role.name}.`));
+            shown.append(label);
+            const tierCell = el("td");
+            const select = el("select", undefined, "form-select form-select-sm");
+            tierOptions(select, role.tier);
+            select.disabled = role.locked;
+            select.addEventListener("change", () => {
+                const tier = Number(select.value);
+                if (tier === 1 && !confirm(`An L1 role can do everything the admin role can. Make ${role.label} L1?`)) {
+                    select.value = role.tier; return;
+                }
+                change("PUT", `${api}/${encodeURIComponent(role.name)}`, { tier }, `${role.label} is now ${tierName(tier)}.`);
+            });
+            tierCell.append(select);
+            const accounts = el("td", String(role.accounts));
+            const action = el("td", undefined, "text-end");
+            if (role.custom || role.changed) {
+                const button = el("button", role.custom ? "Delete" : "Reset", "btn btn-sm btn-outline-secondary");
+                button.disabled = role.custom && role.accounts > 0;
+                button.title = button.disabled ? "Give these accounts another role first" : "";
+                button.addEventListener("click", () => {
+                    if (role.custom && !confirm(`Delete the role ${role.name}?`)) return;
+                    change("DELETE", `${api}/${encodeURIComponent(role.name)}`, null, role.custom ? `Deleted ${role.name}.` : `${role.name} is back to its built-in tier and label.`);
+                });
+                action.append(button);
+            }
+            tr.append(name, shown, tierCell, accounts, action);
+            rows.append(tr);
+        }
+
+        // the forms
+        const chosen = Number($("newTier").value) || 3;
+        tierOptions($("newTier"), chosen);
+        const assignSelect = $("assignRole");
+        const keep = assignSelect.value;
+        assignSelect.replaceChildren();
+        for (const role of data.roles) {
+            const option = el("option", `${role.label} (${tierName(role.tier)})`);
+            option.value = role.name; option.selected = role.name === keep;
+            assignSelect.append(option);
+        }
+
+        const log = $("changes");
+        log.replaceChildren();
+        for (const entry of data.recent_changes) {
+            const when = entry.at ? entry.at.replace("T", " ").slice(0, 16) : "";
+            log.append(el("li", `${when}  ${entry.by || "?"}: ${entry.action}, ${entry.detail}`));
+        }
+        if (!data.recent_changes.length) log.append(el("li", "No changes yet.", "text-muted"));
+    }
+
+    $("add").addEventListener("submit", (event) => {
+        event.preventDefault();
+        change("POST", api, { name: $("newName").value, label: $("newLabel").value, tier: Number($("newTier").value) },
+               `Added ${$("newName").value.trim()}.`);
+        $("newName").value = ""; $("newLabel").value = "";
+    });
+    $("assign").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+            const body = await call("PUT", assignApi, { uid: $("assignUid").value.trim(), role: $("assignRole").value });
+            say(`${body.uid} is now ${body.role_label}.`, "success");
+            data = await call("GET", api); render();
+        } catch (error) {
+            say(error.message, "danger");
+        }
+    });
+
+    call("GET", api).then((body) => { data = body; render(); }).catch((error) => say(error.message, "danger"));
+})();
+</script>
+{% endblock %}
+
+{% block background %}
+{% endblock %}

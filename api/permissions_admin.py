@@ -54,8 +54,9 @@ def _payload():
     return {
         'levels': list(permissions.LEVELS),
         # what people call each level in this kit: the kit's role labels, which the file never names
-        'level_labels': {permissions.PUBLIC: 'Public', **{role: roles.public_roles()[role]['label']
-                                                          for role in permissions.ROLE_LEVELS}},
+        'level_labels': {permissions.PUBLIC: f'Public (L{roles.LOWEST_TIER})',
+                         **{role: f"{roles.public_roles()[role]['label']} (L{roles.SEAT_TIER[role]})"
+                            for role in permissions.ROLE_LEVELS}},
         'features': [{'id': fid, 'name': catalog[fid]['name'], 'enabled': fid in enabled} for fid in order],
         'requests': rows,
         'recent_changes': permission_override.recent_changes(),

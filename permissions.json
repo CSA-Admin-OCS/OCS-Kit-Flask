@@ -185,15 +185,21 @@
     "POST /api/persona/create",
     "DELETE /api/persona/delete/<int:id>",
     "PUT /api/persona/update/<int:id>",
+    "GET /api/roles",
+    "POST /api/roles",
+    "DELETE /api/roles/<string:role_name>",
+    "PUT /api/roles/<string:role_name>",
     "DELETE /api/section",
     "POST /api/section",
     "POST /api/snapshot/aurora",
     "POST /api/snapshot/sqlite",
     "DELETE /api/user",
+    "PUT /api/user/role",
     "POST /api/users",
     "GET /cors/",
     "GET /permissions/",
     "GET /persona/",
+    "GET /roles/",
     "PUT /update_user/<string:uid>",
     "DELETE /users/delete/<int:user_id>",
     "POST /users/reset_password/<int:user_id>"
@@ -214,6 +220,12 @@
     "GET /cors/",
     "GET /api/cors",
     "PUT /api/cors",
-    "DELETE /api/cors"
+    "DELETE /api/cors",
+    "GET /roles/",
+    "GET /api/roles",
+    "POST /api/roles",
+    "PUT /api/roles/<string:role_name>",
+    "DELETE /api/roles/<string:role_name>",
+    "PUT /api/user/role"
   ]
 }
