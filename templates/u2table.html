@@ -48,7 +48,17 @@
                 </td>
                 <td id="commits-{{ user.uid }}">Loading...</td>
                 <td>
-                    <button class="btn btn-primary edit-btn" data-id="{{ user.id }}">Edit</button>
+                    {# Edit is a menu of places to go; what is offered depends on the row and on what the viewer may open #}
+                    {% set places = edit_links(user) %}
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-primary dropdown-toggle edit-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                                {% if not places %}disabled{% endif %}>Edit</button>
+                        <ul class="dropdown-menu">
+                            {% for place in places %}
+                            <li><a class="dropdown-item" href="{{ place.url }}"{% if place.external %} target="_blank" rel="noopener"{% endif %}>{{ place.label }}{% if place.external %} &#8599;{% endif %}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                     {% if current_user.is_admin() %}
                     <button class="btn btn-danger delete-btn" data-id="{{ user.id }}">Delete</button>
                     <button class="btn btn-warning reset-password-btn" data-id="{{ user.id }}">Reset Password</button>

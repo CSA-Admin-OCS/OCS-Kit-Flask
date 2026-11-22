@@ -161,11 +161,30 @@ def index():
 
 # Admin pages. Staff (e.g. Teacher / Manager / Editor) may view users and sections; changing
 # or deleting accounts is admin-only. Anonymous visitors are sent to /login, others get 403.
+def _edit_links(person):
+    """Where the signed-in person can go to change this account, as [{label, url, external}]: only pages they may
+    open, by the permission levels in force now. Roles and sections are pages of this backend; the profile page of the
+    website edits whoever is signed in, so it is offered only on the person's own row."""
+    me = current_user if current_user.is_authenticated else None
+    rules = {rule.endpoint: rule.rule for rule in app.url_map.iter_rules()}
+    may_open = lambda endpoint: endpoint in rules and permissions.may_make('GET', rules[endpoint], me)
+    own_row = me is not None and person.id == me.id
+    links = []
+    if not own_row and may_open('roles_admin.page'):   # nobody changes their own role: ask another admin
+        links.append({'label': 'Change role', 'url': url_for('roles_admin.page', uid=person.uid), 'external': False})
+    if may_open('sections'):
+        links.append({'label': 'Sections', 'url': url_for('sections'), 'external': False})
+    website = (app.config.get('FRONTEND_URL') or '').rstrip('/')
+    if own_row and website:
+        links.append({'label': 'Open my profile on the website', 'url': f'{website}/profile', 'external': True})
+    return links
+
+
 @app.route('/users/table2')
 @staff_page_required
 def u2table():
     users = User.query.all()
-    return render_template("u2table.html", user_data=users)
+    return render_template("u2table.html", user_data=users, edit_links=_edit_links)
 
 @app.route('/sections/')
 @staff_page_required

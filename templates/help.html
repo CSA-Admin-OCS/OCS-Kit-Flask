@@ -125,8 +125,10 @@ curl -b jar {{ api_base }}/api/classrooms/1/students                 # list them
     {% call section("admin", "Administration (" ~ kit.roles.admin.label ~ ")") %}
         {% call qa("Where do I manage users?") %}
         <p class="mb-0">In the <b>Data</b> menu, open <a href="{{ url_for('u2table') }}">User Management</a>. It lists every account, and an admin
-        can edit, delete or reset the password of any of them. A reset sets the password to the default from <code>.env</code>
-        (<code>DEFAULT_PASSWORD</code>), and the person should change it at once.</p>
+        can edit, delete or reset the password of any of them. <b>Edit</b> is a menu of places to go: <b>Change role</b> opens the Roles page with
+        that account already filled in, <b>Sections</b> opens the sections page, and on your own row <b>Open my profile on the website</b> opens your
+        profile there (that page edits whoever is signed in, so it is not offered for other accounts). You only see the places you may open.
+        A reset sets the password to the default from <code>.env</code> (<code>DEFAULT_PASSWORD</code>), and the person should change it at once.</p>
         {% endcall %}
         {% call qa("What happens when I delete a user?") %}
         <p class="mb-0">An admin cannot delete their own account. A person who still owns records, such as posts or classrooms, is kept

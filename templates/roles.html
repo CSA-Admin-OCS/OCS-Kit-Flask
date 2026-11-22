@@ -198,7 +198,16 @@
         }
     });
 
-    call("GET", api).then((body) => { data = body; render(); }).catch((error) => say(error.message, "danger"));
+    call("GET", api).then((body) => {
+        data = body; render();
+        // arriving from the user table's Edit menu: /roles/?uid=ada has that account ready in the form below
+        const wanted = new URLSearchParams(window.location.search).get("uid");
+        if (wanted) {
+            $("assignUid").value = wanted;
+            $("assign").scrollIntoView({ block: "center" });
+            $("assignRole").focus();
+        }
+    }).catch((error) => say(error.message, "danger"));
 })();
 </script>
 {% endblock %}
