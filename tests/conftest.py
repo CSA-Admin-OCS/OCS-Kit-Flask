@@ -29,7 +29,6 @@ os.environ.update({
     'ADMIN_UID': '', 'TEACHER_UID': '', 'USER_UID': '', 'MY_UID': '',
     'ADMIN_USER': '', 'TEACHER_USER': '', 'USER_NAME': '', 'MY_NAME': '', 'MY_ROLE': '',
     'GEMINI_API_KEY': SECRET_GEMINI, 'GROQ_API_KEY': '',
-    'KASM_SERVER': '', 'KASM_API_KEY': '', 'KASM_API_KEY_SECRET': '',
     'GITHUB_TOKEN': '', 'ALLOWED_EMAIL_DOMAINS': '', 'RESET_TOKEN_SECRET': '',
 })
 

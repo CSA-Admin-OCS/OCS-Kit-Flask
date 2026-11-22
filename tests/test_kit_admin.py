@@ -126,10 +126,19 @@ def test_shared_blueprint_follows_either_feature(app):
 
 
 def test_admin_navbar_follows_overrides(app):
+    from __init__ import db
+    from model.persona import Persona
     admin = login(app, ADMIN)
-    assert 'Kasm User Report' in admin.get('/users/table2').get_data(as_text=True)
-    _put(admin, {'kasm': False})
-    assert 'Kasm User Report' not in admin.get('/users/table2').get_data(as_text=True)
+    assert 'Personas' not in admin.get('/users/table2').get_data(as_text=True)      # social is off in the test kit
+    try:
+        _put(admin, {'social': True})
+        assert 'Personas' in admin.get('/users/table2').get_data(as_text=True)
+        _put(admin, {'social': False})
+        assert 'Personas' not in admin.get('/users/table2').get_data(as_text=True)
+    finally:
+        with app.app_context():  # turning social on seeds personas; later tests expect none
+            Persona.query.delete()
+            db.session.commit()
 
 
 def test_changes_are_audited(app):

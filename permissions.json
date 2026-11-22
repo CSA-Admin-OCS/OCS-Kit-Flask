@@ -187,8 +187,6 @@
     "POST /api/snapshot/sqlite",
     "DELETE /api/user",
     "POST /api/users",
-    "DELETE /delete_user/<user_id>",
-    "GET /kasm_users",
     "GET /permissions/",
     "GET /persona/",
     "PUT /update_user/<string:uid>",

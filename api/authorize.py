@@ -136,7 +136,7 @@ def page_roles_required(allowed):
     return decorator
 
 
-# Pages only the admin role may open (user deletion, password resets, Kasm, ...)
+# Pages only the admin role may open (user deletion, password resets, ...)
 admin_page_required = page_roles_required(lambda: (role_config.admin_role(),))
 # Pages staff (e.g. Teacher / Manager / Editor) and admins may open (user list, sections)
 staff_page_required = page_roles_required(role_config.staff_roles)

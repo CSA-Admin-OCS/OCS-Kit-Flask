@@ -132,7 +132,6 @@ def test_endpoints_answer_200_or_404_by_preset(app, kit):
     _switch(admin, kit)
     for fid, url in PROBES.items():
         assert admin.get(url).status_code == (200 if fid in _preset(kit) else 404), f'{kit}: {fid} {url}'
-    assert admin.get('/kasm_users').status_code == 404  # in no preset
     assert admin.get('/api/section').status_code == 200  # core is always on
 
 

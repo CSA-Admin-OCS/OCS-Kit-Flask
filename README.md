@@ -53,9 +53,10 @@ Each feature has a **category**: `core` is always on, `general` features are use
 | `social` | general | `/api/microblog`, `/api/post`, `/api/persona`, `/persona/` admin page |
 | `analytics` | general | `/api/analytics`, `/api/user/skill-passport`, `/api/user/skill-snapshot`, `/api/admin/skill-passport`, `/api/snapshot` |
 | `assignments` | education | `/api/study` (`/api/grade` exists but is never served) |
-| `kasm` | general | `/kasm_users` admin page; Kasm user sync in the User model |
 | `examples` | general | `/api/jokes`, `/api/student/*`, `/api/students`, `/api/congrats` |
-| `lessons`, `calendar`, `hallpass`, `finance-sim`, `resume`, `face-recognition` | | No Flask code. These are served by the Pages and Spring backends. |
+| `lessons`, `calendar`, `hallpass`, `finance-sim`, `resume`, `face-recognition`, `kasm` | | No Flask code. These are served by the Pages and Spring backends. |
+
+This backend has no Kasm code any more: no Kasm admin page, no Kasm user sync, no `KASM_*` settings, and the `kasm_server_needed` field is gone from users. A request that still sends that field simply ignores it, and an existing database keeps its old column untouched. The `kasm` feature id stays in the catalog because the catalog is shared with Pages and Spring.
 
 Endpoints of disabled features return 404, and their admin-page links are hidden.
 
@@ -65,11 +66,11 @@ Every kit has the same three roles: **admin** runs the site and is the only role
 
 | Who | Can do |
 |-----|--------|
-| admin | Everything: turn features on and off, see each feature's setup status, manage users (delete, reset passwords), Kasm and persona admin pages |
+| admin | Everything: turn features on and off, see each feature's setup status, manage users (delete, reset passwords) and the persona admin page |
 | staff | Open the user list and sections admin pages; staff-only API actions (classrooms, grading summaries in production). Cannot change features. |
 | member | Use the enabled features and edit their own profile. Can see which features are on (`/api/kit`) but cannot change them. |
 
-Deleting a user (`DELETE /api/user` with `{"uid": ...}`, or the Delete button on the users page) is admin-only. An admin cannot delete their own account, and a user who still owns records such as posts or classrooms is kept and the answer is a 409 saying so, rather than a false "deleted". Kasm is told to remove the account only after it is really gone.
+Deleting a user (`DELETE /api/user` with `{"uid": ...}`, or the Delete button on the users page) is admin-only. An admin cannot delete their own account, and a user who still owns records such as posts or classrooms is kept and the answer is a 409 saying so, rather than a false "deleted".
 
 ### Permissions
 
@@ -220,7 +221,6 @@ To add code to an existing feature, append to that feature's lists instead.
 
 Within the enabled kit features, integrations that need settings turn themselves off when those settings are empty:
 - Gemini and Groq AI chat
-- Kasm virtual desktops
 - GitHub feedback issues (`FEEDBACK_GITHUB_REPO`)
 - The skill-snapshot automator
 

@@ -20,19 +20,6 @@ def foreign_keys(app):
         db.engine.dispose()
 
 
-@pytest.fixture
-def kasm_calls(monkeypatch):
-    """Record uids sent to Kasm, so a test can see whether Kasm was told about a deletion."""
-    import model.user as user_model
-    calls = []
-
-    class Recorder:
-        def delete(self, uid):
-            calls.append(uid)
-    monkeypatch.setattr(user_model, 'KasmUser', lambda: Recorder())
-    return calls
-
-
 def _make_user(app, uid, owns_classroom=False):
     from model.classroom import Classroom
     from model.user import User
@@ -62,36 +49,33 @@ BOTH = pytest.mark.parametrize('delete', [_delete_by_api, _delete_by_page], ids=
 
 
 @BOTH
-def test_admin_deletes_a_user_and_tells_kasm_afterwards(app, foreign_keys, kasm_calls, delete):
+def test_admin_deletes_a_user(app, foreign_keys, delete):
     id_ = _make_user(app, 'doomed')
     r = delete(login(app, ADMIN), 'doomed', id_)
     assert r.status_code == 200 and 'doomed' in r.get_json()['message']
     assert not _exists(app, 'doomed')
-    assert kasm_calls == ['doomed']
 
 
 @BOTH
-def test_user_who_owns_records_is_kept_and_the_answer_says_so(app, foreign_keys, kasm_calls, delete):
+def test_user_who_owns_records_is_kept_and_the_answer_says_so(app, foreign_keys, delete):
     id_ = _make_user(app, 'owner', owns_classroom=True)
     r = delete(login(app, ADMIN), 'owner', id_)
     assert r.status_code == 409 and 'still owns records' in r.get_json()['message']
     assert _exists(app, 'owner')
-    assert kasm_calls == []  # Kasm is not told to remove an account we still have
 
 
 @BOTH
-def test_admin_cannot_delete_their_own_account(app, foreign_keys, kasm_calls, delete):
+def test_admin_cannot_delete_their_own_account(app, foreign_keys, delete):
     from model.user import User
     with app.app_context():
         admin_id = User.query.filter_by(_uid=ADMIN).first().id
     r = delete(login(app, ADMIN), ADMIN, admin_id)
     assert r.status_code == 400 and 'your own account' in r.get_json()['message']
     assert _exists(app, ADMIN)
-    assert kasm_calls == []
 
 
 @BOTH
-def test_unknown_user_is_404(app, kasm_calls, delete):
+def test_unknown_user_is_404(app, delete):
     assert delete(login(app, ADMIN), 'nobody-here', 999999).status_code == 404
 
 

@@ -724,22 +724,13 @@
         "verify": "Open the Kasm users admin page; it should list Kasm users."
       },
       "flask": {
-        "blueprints": [
-          "api.kasm_admin:kasm_admin"
-        ],
+        "blueprints": [],
         "uses_blueprints": [],
         "inactive_blueprints": [],
-        "models": [
-          "model.kasm"
-        ],
+        "models": [],
         "seed": [],
         "startup": [],
-        "admin_links": [
-          {
-            "label": "Kasm User Report",
-            "endpoint": "kasm_admin.kasm_users"
-          }
-        ]
+        "admin_links": []
       }
     },
     "face-recognition": {

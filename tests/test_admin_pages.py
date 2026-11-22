@@ -5,7 +5,7 @@ from conftest import ADMIN, MEMBER, STAFF, login
 
 STAFF_PAGES = [('GET', '/users/table2'), ('GET', '/sections/')]
 ADMIN_PAGES = [('DELETE', '/users/delete/99999'), ('POST', '/users/reset_password/99999'),
-               ('PUT', '/update_user/nobody'), ('GET', '/kasm_users'), ('DELETE', '/delete_user/123')]
+               ('PUT', '/update_user/nobody')]
 
 
 @pytest.mark.parametrize('method,url', STAFF_PAGES + ADMIN_PAGES)
@@ -33,7 +33,6 @@ def test_staff_and_admin_open_staff_pages(app, uid, method, url):
 def test_admin_passes_admin_checks(app):
     client = login(app, ADMIN)
     assert client.delete('/users/delete/99999').status_code == 404       # past auth: no such user
-    assert client.get('/kasm_users').status_code == 400                  # past auth: no Kasm keys
 
 
 def test_user_table_shows_kit_role_labels(app):
