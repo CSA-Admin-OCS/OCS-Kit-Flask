@@ -139,6 +139,9 @@
     "GET /api/admin/skill-passport/<int:user_id>",
     "GET /api/analytics/commits/<string:uid>",
     "GET /api/analytics/issues/<string:uid>",
+    "DELETE /api/cors",
+    "GET /api/cors",
+    "PUT /api/cors",
     "GET /api/export/all",
     "GET /api/export/classrooms",
     "GET /api/export/counts",
@@ -187,6 +190,7 @@
     "POST /api/snapshot/sqlite",
     "DELETE /api/user",
     "POST /api/users",
+    "GET /cors/",
     "GET /permissions/",
     "GET /persona/",
     "PUT /update_user/<string:uid>",
@@ -205,6 +209,10 @@
     "POST /api/authenticate",
     "GET /permissions/",
     "GET /api/permissions",
-    "PUT /api/permissions"
+    "PUT /api/permissions",
+    "GET /cors/",
+    "GET /api/cors",
+    "PUT /api/cors",
+    "DELETE /api/cors"
   ]
 }

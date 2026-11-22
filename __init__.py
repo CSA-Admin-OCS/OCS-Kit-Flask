@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_login import LoginManager
-from flask_cors import CORS
+import cors
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from dotenv import load_dotenv
@@ -53,20 +53,15 @@ app.config['ALLOWED_EMAIL_DOMAINS'] = [
     d.strip().lower().lstrip('@') for d in (os.environ.get('ALLOWED_EMAIL_DOMAINS') or '').split(',') if d.strip()
 ]
 
-# Allowed servers for cross-origin resource sharing (CORS)
-# Comma-separated list from CORS_ORIGINS; defaults to local development frontends
+# Websites allowed to call this backend from a browser (CORS).
+# CORS_ORIGINS is a comma-separated list; empty means the local development frontends. An admin can replace
+# the list at runtime from the CORS page (see cors.py), and Reset there returns to this one.
 default_origins = 'http://localhost:4500,http://127.0.0.1:4500,http://localhost:4000,http://127.0.0.1:4000'
-allowed_origins = [
+app.config['CORS_ORIGINS_FROM_ENV'] = bool((os.environ.get('CORS_ORIGINS') or '').strip())
+app.config['CORS_ORIGINS'] = [
     o.strip() for o in (os.environ.get('CORS_ORIGINS') or default_origins).split(',') if o.strip()
 ]
-app.config['CORS_ORIGINS'] = allowed_origins
-
-cors = CORS(
-   app,
-   supports_credentials=True,
-   origins=allowed_origins,
-   methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-)
+cors.init_app(app)
 
 
 # Seeded account defaults

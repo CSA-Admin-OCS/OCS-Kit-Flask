@@ -118,6 +118,16 @@ python -m permissions           # entries per level, and the unreviewed list
 
 **Upgrading a copy that has its own routes.** Accounts, roles and logins are unchanged, but a route of your own is in no list, so it is refused until you add it. Run `python -m permissions --check`, put each route it names under `unreviewed` to keep it exactly as open as it is today, deploy, then move each one to its real level when you have decided. The Gemini endpoints now need a login in development too, as they already did in production.
 
+### CORS
+
+A browser only lets a website call this backend if the website's origin is allowed. An origin is the scheme, host and port the browser sends: `https://pages.example.org` or `http://localhost:4500`, with no path and no trailing slash. Admins manage the list on the **CORS** page (admin menu, `/cors/`), with no restart:
+
+- **Where the list comes from.** The list an admin saved on the page, if there is one; otherwise `CORS_ORIGINS` in `.env`; otherwise the local development sites. **Reset** forgets the saved list, so `.env` decides again.
+- **Applies at once.** The list is read on every cross-origin request, so a change reaches every worker on the next request. If the saved list cannot be read, no cross-origin request is allowed until it can.
+- **Only exact origins can be saved.** A path, trailing slash, pattern or `*` is refused with a message saying what to fix. The page warns about `http://` origins that are not local. An entry in `.env` may still be a pattern (a regular expression, or `*` for every site), as before; the page flags it, and saving a list drops it.
+- **API.** `GET /api/cors`, `PUT /api/cors` with `{"origins": ["https://pages.example.org"]}`, and `DELETE /api/cors` to reset. Admin only, and pinned in `permissions.json` so they cannot be changed from the Permissions page. Every change is logged with who made it.
+- **Headers.** `cors.py` replaces the Flask-CORS library, which fixed its list when the app started, so a runtime change could not reach the other workers. The answers are the same as Flask-CORS gave (checked request by request), except that a request with no `Origin` header, which a browser sends only for same-site requests, no longer gets an `Access-Control-Allow-Origin` header.
+
 ### Customizing features
 
 An admin can [apply a whole kit at runtime](#switching-kits-at-runtime), which replaces the first two layers below. Otherwise features are decided in three layers, and each later layer wins:
@@ -213,7 +223,7 @@ To add code to an existing feature, append to that feature's lists instead.
 ## Going to production
 
 1. In `.env`, set `IS_PRODUCTION=true`. The app then refuses to start without `SECRET_KEY`, `ADMIN_PASSWORD` and `DEFAULT_PASSWORD`, and it sends secure, cross-site cookies.
-2. Set `CORS_ORIGINS` to your frontend origin(s), e.g. `https://pages.example.org`.
+2. Set `CORS_ORIGINS` to your frontend origin(s), e.g. `https://pages.example.org`, or add them later on the CORS page.
 3. Set `COOKIE_DOMAIN` (e.g. `.example.org`) if the frontend and backend are on different subdomains.
 4. Optionally, set `ALLOWED_EMAIL_DOMAINS` to limit signups to your organization's email domains.
 5. Put nginx in front of the backend using [`deploy/nginx.conf.template`](deploy/nginx.conf.template). The instructions for filling it in with `envsubst` and getting a certificate with certbot are at the top of that file.
@@ -259,6 +269,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `roles.py` | Role names and per-kit labels from the catalog |
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
 | `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
+| `cors.py`, `api/cors_admin.py`, `templates/cors.html`, `model/cors_setting.py` | The CORS headers, the admin CORS page and API, and the origins admins saved |
 | `model/feature_override.py` | Admin feature overrides and their audit log |
 | `__init__.py` | Flask app, configuration from environment, database setup |
 | `api/` | REST API blueprints |

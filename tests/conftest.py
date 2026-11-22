@@ -28,6 +28,7 @@ os.environ.update({
     'USER_PASSWORD': PASSWORD, 'MY_PASSWORD': PASSWORD,
     'ADMIN_UID': '', 'TEACHER_UID': '', 'USER_UID': '', 'MY_UID': '',
     'ADMIN_USER': '', 'TEACHER_USER': '', 'USER_NAME': '', 'MY_NAME': '', 'MY_ROLE': '',
+    'CORS_ORIGINS': '',
     'GEMINI_API_KEY': SECRET_GEMINI, 'GROQ_API_KEY': '',
     'GITHUB_TOKEN': '', 'ALLOWED_EMAIL_DOMAINS': '', 'RESET_TOKEN_SECRET': '',
 })
@@ -55,6 +56,7 @@ def _no_overrides(request):
         return
     flask_app = request.getfixturevalue('app')
     from model.feature_override import FeatureOverride, KitSetting
+    from model.cors_setting import CorsAudit, CorsSetting
     from model.permission_override import PermissionAudit, PermissionOverride
     from __init__ import db
 
@@ -64,6 +66,8 @@ def _no_overrides(request):
             KitSetting.query.delete()
             PermissionOverride.query.delete()
             PermissionAudit.query.delete()
+            CorsSetting.query.delete()
+            CorsAudit.query.delete()
             db.session.commit()
     clear()
     yield

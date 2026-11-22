@@ -127,6 +127,7 @@
         "blueprints": [
           "api.kit_api:kit_api",
           "api.permissions_admin:permissions_admin",
+          "api.cors_admin:cors_admin",
           "api.user:user_api",
           "api.section:section_api",
           "api.pfp:pfp_api",
@@ -143,7 +144,8 @@
           "model.feedback",
           "model.github",
           "model.feature_override",
-          "model.permission_override"
+          "model.permission_override",
+          "model.cors_setting"
         ],
         "seed": [],
         "seed_accounts": [
@@ -162,6 +164,10 @@
           {
             "label": "Permissions",
             "endpoint": "permissions_admin.page"
+          },
+          {
+            "label": "CORS",
+            "endpoint": "cors_admin.page"
           }
         ]
       }

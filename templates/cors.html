@@ -1,0 +1,177 @@
+{% extends "layouts/base.html" %}
+{% set project = "CORS" %}
+
+{% block body %}
+<div class="container mt-5 mb-5">
+    <h1>CORS</h1>
+    <p class="text-muted">
+        A browser only lets a website call this backend if the website's <b>origin</b> is on this list, for example
+        <code>https://pages.example.org</code> or <code>http://localhost:4500</code>: the scheme, the host and the
+        port if there is one, with no path and no trailing slash. Your change is saved in the database and applies
+        on the next request. <b>Reset</b> forgets it, so the <code>CORS_ORIGINS</code> list in <code>.env</code>
+        decides again.
+    </p>
+
+    <p class="mb-3">
+        <span id="source" class="badge bg-secondary fs-6"></span>
+        <span id="count" class="ms-2 text-muted"></span>
+    </p>
+    <div id="status" class="alert d-none" role="alert"></div>
+
+    <div class="card mb-3">
+        <div class="card-header">Websites allowed to call this backend</div>
+        <table class="table table-sm mb-0 align-middle">
+            <tbody id="rows"></tbody>
+        </table>
+        <div class="card-body border-top">
+            <form id="add" class="d-flex gap-2">
+                <input id="new" class="form-control" placeholder="https://pages.example.org" autocomplete="off" spellcheck="false">
+                <button class="btn btn-outline-primary" type="submit">Add</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+        <button id="save" class="btn btn-primary" disabled>Save changes</button>
+        <button id="discard" class="btn btn-outline-secondary" disabled>Discard</button>
+        <span id="pending" class="text-muted"></span>
+        <button id="reset" class="btn btn-outline-danger ms-auto">Reset to the .env list</button>
+    </div>
+    <p id="defaults" class="small text-muted"></p>
+    <p id="patternNote" class="small text-danger d-none">
+        Entries marked <b>pattern</b> come from <code>.env</code> and cannot be saved here. Saving drops them, so add
+        the exact origins they stood for first.
+    </p>
+
+    <h2 class="h5 mt-5">Recent changes</h2>
+    <ul id="changes" class="list-unstyled small"></ul>
+</div>
+
+<script>
+(function () {
+    const api = "{{ url_for('cors_admin.get_cors') }}";
+    let data = null;
+    let working = [];   // the list as the admin has it on screen: [{origin, kind, warning}]; nothing is sent until Save
+
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, text, cls) => {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (cls) node.className = cls;
+        return node;
+    };
+    const say = (message, kind) => {
+        const box = $("status");
+        box.textContent = message;
+        box.className = "alert alert-" + kind;
+    };
+    const SOURCES = {
+        admin: ["Saved by an admin", "bg-primary"],
+        env: ["From CORS_ORIGINS in .env", "bg-secondary"],
+        default: ["Default: local development sites", "bg-secondary"],
+    };
+
+    const saved = () => data.origins.map((entry) => entry.origin);
+    const exactOrigins = () => working.filter((entry) => entry.kind === "exact").map((entry) => entry.origin);
+    const dirty = () => JSON.stringify(working.map((entry) => entry.origin)) !== JSON.stringify(saved());
+
+    function render() {
+        const [label, color] = SOURCES[data.source];
+        $("source").textContent = label;
+        $("source").className = "badge fs-6 " + color;
+        $("count").textContent = working.length + (working.length === 1 ? " origin" : " origins");
+
+        const rows = $("rows");
+        rows.replaceChildren();
+        if (!working.length) {
+            const tr = el("tr"); const td = el("td", "No website may call this backend from a browser.", "text-muted p-3");
+            tr.append(td); rows.append(tr);
+        }
+        for (const entry of working) {
+            const tr = el("tr");
+            const name = el("td"); name.append(el("code", entry.origin));
+            if (entry.kind === "pattern") name.append(el("span", "pattern", "badge bg-danger ms-2"));
+            const note = el("td", entry.warning || "", "small text-warning-emphasis");
+            const action = el("td", undefined, "text-end");
+            const remove = el("button", "Remove", "btn btn-sm btn-outline-secondary");
+            remove.addEventListener("click", () => {
+                working = working.filter((other) => other !== entry);
+                render();
+            });
+            action.append(remove);
+            if (entry.warning) tr.classList.add("table-warning");
+            tr.append(name, note, action);
+            rows.append(tr);
+        }
+
+        const changed = dirty();
+        $("save").disabled = $("discard").disabled = !changed;
+        $("pending").textContent = changed ? "Unsaved changes" : "";
+        $("patternNote").classList.toggle("d-none", !working.some((entry) => entry.kind === "pattern"));
+        $("reset").disabled = data.source !== "admin";
+        $("defaults").textContent = ".env list: " + (data.default_origins.map((entry) => entry.origin).join(", ") || "(empty)");
+
+        const log = $("changes");
+        log.replaceChildren();
+        for (const change of data.recent_changes) {
+            const when = change.at ? change.at.replace("T", " ").slice(0, 16) : "";
+            log.append(el("li", `${when}  ${change.by || "?"}: ${change.action === "reset" ? "reset" : "saved"}, ${change.detail}`));
+        }
+        if (!data.recent_changes.length) log.append(el("li", "No changes yet.", "text-muted"));
+    }
+
+    function load(body) {
+        data = body;
+        working = data.origins.map((entry) => ({ ...entry }));
+        render();
+    }
+
+    async function send(method, payload) {
+        const response = await fetch(api, {
+            method, headers: { "Content-Type": "application/json" },
+            body: payload ? JSON.stringify(payload) : undefined,
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || "Request failed (" + response.status + ")");
+        load(body);
+    }
+
+    $("add").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const value = $("new").value.trim();
+        if (!value) return;
+        if (!working.some((entry) => entry.origin.toLowerCase() === value.toLowerCase())) {
+            working.push({ origin: value, kind: "exact", warning: null });   // the server checks it on Save
+        }
+        $("new").value = "";
+        render();
+    });
+    $("discard").addEventListener("click", () => load(data));
+    $("save").addEventListener("click", async () => {
+        try {
+            await send("PUT", { origins: exactOrigins() });
+            say("Saved. The new list applies from the next request.", "success");
+        } catch (error) {
+            say(error.message, "danger");
+        }
+    });
+    $("reset").addEventListener("click", async () => {
+        if (!confirm("Forget the saved list and go back to the .env list?")) return;
+        try {
+            await send("DELETE");
+            say("Back to the .env list.", "success");
+        } catch (error) {
+            say(error.message, "danger");
+        }
+    });
+
+    fetch(api).then((response) => response.json().then((body) => {
+        if (!response.ok) throw new Error(body.message || "Request failed (" + response.status + ")");
+        load(body);
+    })).catch((error) => say(error.message, "danger"));
+})();
+</script>
+{% endblock %}
+
+{% block background %}
+{% endblock %}
