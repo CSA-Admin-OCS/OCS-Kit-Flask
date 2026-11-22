@@ -16,6 +16,18 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
     <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        // Light or dark: the choice kept by the navbar switch, else the system setting. Set here, before the page
+        // paints, so there is no flash of the other theme (see static/css/theme.css and the switch in navbar.html).
+        (function () {
+            var theme = null;
+            try { theme = localStorage.getItem("theme"); } catch (e) {}
+            if (theme !== "light" && theme !== "dark") {
+                theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+            }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
     <!-- JQuery -->
     <script type="text/javascript" language="javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
@@ -25,6 +37,8 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!-- Light and dark colours; after Bootstrap so they win -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
 
     <!-- Bootstrap JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
@@ -69,16 +83,26 @@ This HTML is setup as as a Jinja2 layout, coders use layouts for:
     <script src="{{ url_for('static', filename='js/three.r119.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/vanta.birds.min.js') }}"></script>
     <script>
-        VANTA.BIRDS({
-            el: "#body_background",
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.00,
-            minWidth: 200.00,
-            scale: 1.00,
-            scaleMobile: 1.00
-        })
+        // The animated background follows the theme: it is started again with that theme's colours when the switch
+        // in the navbar changes it (window.startVanta is called from there).
+        window.vantaOptions = {
+            light: { backgroundColor: 0xeef3f9, color1: 0x2f6fed, color2: 0x00b4d8 },
+            dark:  { backgroundColor: 0x07192f, color1: 0xff0000, color2: 0x00d1ff }
+        };
+        window.startVanta = function (theme) {
+            if (window.vantaEffect) window.vantaEffect.destroy();
+            window.vantaEffect = VANTA.BIRDS(Object.assign({
+                el: "#body_background",
+                mouseControls: true,
+                touchControls: true,
+                gyroControls: false,
+                minHeight: 200.00,
+                minWidth: 200.00,
+                scale: 1.00,
+                scaleMobile: 1.00
+            }, window.vantaOptions[theme]));
+        };
+        window.startVanta(document.documentElement.getAttribute("data-theme") || "light");
     </script>
 {% endblock %}
 

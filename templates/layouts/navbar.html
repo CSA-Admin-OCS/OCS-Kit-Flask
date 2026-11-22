@@ -71,10 +71,13 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                 {% endif %}
                 
 
-                <!-- Dark mode action -->
-                <div class="form-check form-switch">
-                    <label class="custom-control-label" for="darkSwitch"></label>
-                    <input type="checkbox" onclick="darkFunction()" class="form-check-input link-dark" id="darkSwitch">
+                <!-- Light / dark mode: sun, switch, moon. The switch is on for dark. -->
+                <div class="theme-toggle d-flex align-items-center gap-2 ms-2">
+                    <i class="fas fa-sun" aria-hidden="true"></i>
+                    <div class="form-check form-switch m-0 p-0 d-flex">
+                        <input type="checkbox" role="switch" class="form-check-input m-0" id="themeSwitch" aria-label="Dark mode" title="Light or dark mode">
+                    </div>
+                    <i class="fas fa-moon" aria-hidden="true"></i>
                 </div>
             </div>
 
@@ -110,30 +113,38 @@ This HTML is setup as a fragment allowing it to be "included" by other HTML file
                 }
                 search.addEventListener('keypress', submitted);
 
-                // Dark Mode Control
-                // darkSwitch global element is set for convenience
-                const darkSwitch=document.getElementById("darkSwitch");
-                // establishes the initial state of darkSwitch on page load
-                if(darkSwitch) {
-                    // obtains the value of darkSwitch from localStorage
-                    const darkSwitchSelected =
-                        localStorage.getItem("darkSwitch") !== null &&
-                        localStorage.getItem("darkSwitch") === "dark";
-                    // sets the value of darkSwitch.checked to the global darkSwitch
-                    darkSwitch.checked=darkSwitchSelected;
-                    // if dark-mode, toggle the switch to dark-mode position
-                    if (darkSwitchSelected)
-                        document.body.classList.toggle("dark-mode");
-                }
-                // executes on each "dark mode" UI toggle
-                function darkFunction() {
-                    // toggles between off (standard CSS) and dark-mode (.dark-mode CSS)
-                    document.body.classList.toggle("dark-mode");
-                    // localStorage is used to manage darkSwitch status
-                    darkSwitch.checked
-                        ? localStorage.setItem("darkSwitch","dark")
-                        : localStorage.removeItem("darkSwitch");
-                }
+                // Light / dark mode. <html data-theme> was set before the page painted (see base.html); this connects
+                // the switch to it, remembers the choice, and follows the system setting until a choice is made.
+                (function () {
+                    const root = document.documentElement;
+                    const themeSwitch = document.getElementById("themeSwitch");
+                    const chosen = function () { try { return localStorage.getItem("theme"); } catch (e) { return null; } };
+                    const system = function () {
+                        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+                    };
+                    function apply(theme) {
+                        const changed = root.getAttribute("data-theme") !== theme;
+                        root.setAttribute("data-theme", theme);
+                        if (themeSwitch) themeSwitch.checked = theme === "dark";
+                        if (changed && window.startVanta && window.vantaEffect) window.startVanta(theme);
+                    }
+                    if (themeSwitch) {
+                        themeSwitch.addEventListener("change", function () {
+                            const theme = themeSwitch.checked ? "dark" : "light";
+                            try { localStorage.setItem("theme", theme); } catch (e) {}
+                            apply(theme);
+                        });
+                    }
+                    apply(root.getAttribute("data-theme") || system());
+                    if (window.matchMedia) {
+                        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (event) {
+                            if (!chosen()) apply(event.matches ? "dark" : "light");
+                        });
+                    }
+                    window.addEventListener("storage", function (event) {   // another tab changed it
+                        if (event.key === "theme" && (event.newValue === "light" || event.newValue === "dark")) apply(event.newValue);
+                    });
+                })();
                 // End Dark Mode Control
 
             </script>

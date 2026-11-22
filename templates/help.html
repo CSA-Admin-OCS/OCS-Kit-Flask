@@ -70,6 +70,11 @@ curl -b jar {{ api_base }}/api/id</code></pre>
         <p class="mb-0">Every role has a <b>tier</b> from L1 (strongest) to L4 (weakest) that says how much it may do; the built-in roles start
         at L1, L2 and L3. A stronger role can do everything a weaker one can.</p>
         {% endcall %}
+        {% call qa("How do I switch between light and dark mode?") %}
+        <p class="mb-0">Use the sun and moon switch at the right of the top bar: switch on is dark, off is light. The first time, the pages
+        follow your computer's setting. After you choose, your browser remembers it, and it applies at once on every page, including the
+        animated background. It is a setting of your own browser, so it does not change anything for other people.</p>
+        {% endcall %}
         {% call qa("What makes a good password?") %}
         <p class="mb-0">At least 8 characters with an uppercase letter, a lowercase letter, a number and one of
         <code>` ~ ! @ # $ % ^ & * ( )</code>. Anything weaker is refused with a 400. Spring and Pages use the same rule.</p>

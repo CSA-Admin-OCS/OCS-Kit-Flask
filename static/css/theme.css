@@ -1,0 +1,128 @@
+/* Light and dark mode.
+   <html data-theme="light|dark"> is set before the page paints by the script in layouts/base.html, from the choice the
+   person made with the switch in the navbar (kept in localStorage as "theme"), else from the system setting.
+   The colours are the variables below; the rules after them apply them to the Bootstrap 5.0 components these pages use
+   (Bootstrap 5.0 has no dark mode of its own). The light theme leaves Bootstrap's own look except the page background. */
+
+:root {
+    color-scheme: light;
+    --page-bg: #eef3f9;
+    --surface: #ffffff;
+    --surface-2: #f4f6f9;
+    --input-bg: #ffffff;
+    --text: #1f2933;
+    --muted: #5c6773;
+    --border: #d9dee5;
+    --link: #0b5ed7;
+    --code: #a3124f;
+    --nav-bg: #dfe5ee;
+    --nav-text: rgba(31, 41, 51, .78);
+    --nav-text-hover: #000;
+    --nav-icon: #1f2933;
+}
+
+[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg: #07192f;
+    --surface: #13243b;
+    --surface-2: #1a2f4d;
+    --input-bg: #0f1d33;
+    --text: #e8eef6;
+    --muted: #a3b3c6;
+    --border: #2d4468;
+    --link: #8bbcff;
+    --code: #ffb0d3;
+    --nav-bg: #0e1b30;
+    --nav-text: rgba(255, 255, 255, .78);
+    --nav-text-hover: #fff;
+    --nav-icon: #e8eef6;
+}
+
+/* ---- both themes: the page, text, links, cards ------------------------------------------------------------------ */
+/* The page colour is on <html> and <body> stays transparent: the animated background (a canvas behind the page) would
+   be hidden by an opaque body, and a page without the animation shows the colour of <html>. */
+html { background-color: var(--page-bg); }
+body { background-color: transparent; color: var(--text); }
+.page-text { color: var(--text); }                       /* text that sits straight on the page background */
+.text-muted { color: var(--muted) !important; }
+a:not(.btn):not(.dropdown-item):not(.nav-link):not(.navbar-brand):not(.page-link):not(.list-group-item):not([class*="link-"]) { color: var(--link); }
+code { color: var(--code); }
+.card, .modal-content, .list-group-item { background-color: var(--surface); color: var(--text); border-color: var(--border); }
+.card-header, .card-footer, .modal-header, .modal-footer { background-color: var(--surface-2); border-color: var(--border); }
+.card .border-top, .card .border-bottom, .qa.border-bottom { border-color: var(--border) !important; }
+.dropdown-menu:not(.dropdown-menu-dark) { background-color: var(--surface); border-color: var(--border); }
+.dropdown-menu:not(.dropdown-menu-dark) .dropdown-item { color: var(--text); }
+.dropdown-menu:not(.dropdown-menu-dark) .dropdown-item:hover { background-color: var(--surface-2); }
+
+/* outline buttons: Bootstrap's gray and red are a little too faint on a light page */
+.btn-outline-secondary { color: var(--muted); border-color: #8a949e; }
+.btn-outline-secondary:hover { background-color: #5c6773; border-color: #5c6773; color: #fff; }
+.btn-outline-danger { color: #b02a37; border-color: #b02a37; }
+.btn-outline-danger:hover { background-color: #b02a37; border-color: #b02a37; color: #fff; }
+
+/* ---- the navbar, in both themes ---------------------------------------------------------------------------------- */
+.navbar.bg-secondary { background-color: var(--nav-bg) !important; border-bottom: 1px solid var(--border); }
+.navbar-light .navbar-brand, .navbar-light .navbar-brand:hover { color: var(--text); }
+.navbar-light .navbar-nav .nav-link { color: var(--nav-text); }
+.navbar-light .navbar-nav .nav-link:hover, .navbar-light .navbar-nav .nav-link:focus { color: var(--nav-text-hover); }
+.navbar .link-dark { color: var(--text) !important; }
+
+/* ---- the sun / moon switch in the navbar ------------------------------------------------------------------------- */
+.theme-toggle i { font-size: .95rem; color: var(--nav-icon); }
+.theme-toggle .form-check-input { cursor: pointer; }
+
+/* ---- dark theme only: Bootstrap parts that have a light look of their own ---------------------------------------- */
+[data-theme="dark"] .navbar-toggler { border-color: rgba(255, 255, 255, .35); }
+[data-theme="dark"] .navbar-toggler-icon { filter: invert(1); }
+
+[data-theme="dark"] .form-control, [data-theme="dark"] .form-select,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]),
+[data-theme="dark"] select, [data-theme="dark"] textarea {
+    background-color: var(--input-bg); color: var(--text); border-color: var(--border);
+}
+[data-theme="dark"] .form-control::placeholder, [data-theme="dark"] input::placeholder { color: var(--muted); opacity: 1; }
+[data-theme="dark"] .form-control:disabled, [data-theme="dark"] .form-select:disabled { background-color: var(--surface-2); color: var(--muted); }
+[data-theme="dark"] .form-control:focus, [data-theme="dark"] .form-select:focus { background-color: var(--input-bg); color: var(--text); }
+[data-theme="dark"] .form-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e8eef6' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+}
+[data-theme="dark"] select option { background-color: var(--input-bg); color: var(--text); }
+[data-theme="dark"] .form-check-input:not(:checked) { background-color: var(--input-bg); border-color: var(--muted); }
+[data-theme="dark"] .form-switch .form-check-input:not(:checked) {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23a3b3c6'/%3e%3c/svg%3e");
+}
+
+[data-theme="dark"] .btn-outline-primary { color: var(--link); border-color: var(--link); }
+[data-theme="dark"] .btn-outline-primary:hover { background-color: #0d6efd; border-color: #0d6efd; color: #fff; }
+[data-theme="dark"] .btn-outline-secondary { color: var(--muted); border-color: var(--border); }
+[data-theme="dark"] .btn-outline-secondary:hover { background-color: var(--surface-2); color: var(--text); }
+[data-theme="dark"] .btn-outline-danger { color: #ff7b88; border-color: #ff7b88; }
+[data-theme="dark"] .btn-outline-danger:hover { background-color: #dc3545; border-color: #dc3545; color: #fff; }
+[data-theme="dark"] .btn-link { color: var(--link); }
+[data-theme="dark"] .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+
+[data-theme="dark"] .bg-light.text-dark { background-color: var(--surface-2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .badge.bg-dark { background-color: #3a526f !important; }
+
+[data-theme="dark"] .table {
+    --bs-table-bg: transparent;
+    --bs-table-striped-color: var(--text);
+    --bs-table-striped-bg: rgba(255, 255, 255, .04);
+    --bs-table-hover-color: var(--text);
+    --bs-table-hover-bg: rgba(255, 255, 255, .08);
+    color: var(--text);
+    border-color: var(--border);
+}
+[data-theme="dark"] .table-success { --bs-table-bg: rgba(25, 135, 84, .30); --bs-table-striped-bg: rgba(25, 135, 84, .36); --bs-table-hover-bg: rgba(25, 135, 84, .42); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .table-warning { --bs-table-bg: rgba(255, 193, 7, .26); --bs-table-striped-bg: rgba(255, 193, 7, .32); --bs-table-hover-bg: rgba(255, 193, 7, .38); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .table-danger { --bs-table-bg: rgba(220, 53, 69, .34); --bs-table-striped-bg: rgba(220, 53, 69, .40); --bs-table-hover-bg: rgba(220, 53, 69, .46); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .table-info { --bs-table-bg: rgba(13, 202, 240, .24); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .img-thumbnail { background-color: var(--surface-2); border-color: var(--border); }
+
+/* DataTables (user and persona tables) */
+[data-theme="dark"] .dataTables_wrapper, [data-theme="dark"] .dataTables_wrapper label,
+[data-theme="dark"] .dataTables_wrapper .dataTables_info { color: var(--text); }
+[data-theme="dark"] .page-link { background-color: var(--surface); color: var(--link); border-color: var(--border); }
+[data-theme="dark"] .page-item.disabled .page-link { background-color: var(--surface); color: var(--muted); border-color: var(--border); }
+[data-theme="dark"] .page-item.active .page-link { background-color: #0d6efd; border-color: #0d6efd; color: #fff; }
+[data-theme="dark"] table.dataTable > thead > tr > th, [data-theme="dark"] table.dataTable > thead > tr > td { border-bottom-color: var(--border); }

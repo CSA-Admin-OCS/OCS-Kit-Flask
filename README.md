@@ -22,7 +22,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-On first boot, `entrypoint.sh` creates the SQLite database and one seeded account per role. The kit picks their default uids (see [Roles](#roles)), and `ADMIN_UID`, `TEACHER_UID` and `USER_UID` override them. The backend listens on <http://localhost:8587>. Its home page introduces the backend: your organization and kit, the three roles, the features that are on, the admin tools the signed-in person may open, and a short API example. The **Q&A** page at <http://localhost:8587/help/> answers how to use every feature, and anyone can open it. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
+On first boot, `entrypoint.sh` creates the SQLite database and one seeded account per role. The kit picks their default uids (see [Roles](#roles)), and `ADMIN_UID`, `TEACHER_UID` and `USER_UID` override them. The backend listens on <http://localhost:8587>. Its home page introduces the backend: your organization and kit, the three roles, the features that are on, the admin tools the signed-in person may open, and a short API example. The **Q&A** page at <http://localhost:8587/help/> answers how to use every feature, and anyone can open it. The sun and moon switch in the top bar changes every page between light and dark mode; it follows your computer's setting until you choose, and your browser remembers the choice. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
 
 The compose file also starts:
 - `socketio` on port 8500, used by the multiplayer features
@@ -290,6 +290,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
 | `roles.py` | Role names and per-kit labels from the catalog |
 | `branding/`, `scripts/make_logo_assets.py` | The source logo (on white) and the one-off script that makes the transparent web logos in `static/assets/` from it (needs Pillow and numpy; the PNGs are committed) |
+| `static/css/theme.css`, `templates/layouts/` | The light and dark colours, and the layout pieces: the navbar holds the sun/moon switch, and `base.html` sets the theme before the page paints and restarts the animated background with the theme's colours |
 | `templates/help.html` | The Q&A guide at `/help/`; a feature with a blueprint of its own needs a section here (a test checks) |
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
 | `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
