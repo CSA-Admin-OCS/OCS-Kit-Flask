@@ -92,6 +92,7 @@ def inject_kit_config():
         # Role labels of this kit, e.g. {'Admin': 'Admin', 'Teacher': 'Manager', 'User': 'Member'}
         role_labels=roles.labels(),
         admin_links=features.admin_links(),
+        admin_menu=features.group_links(features.admin_links()),  # the Data menu: groups become sub-menus
     )
 
 # Helper function to check if the URL is safe for redirects
@@ -125,10 +126,35 @@ def page_not_found(e):
     # note that we set the 404 status explicitly
     return render_template('404.html'), 404
 
+def _features_by_category(kit):
+    """[(category, [feature, ...])] of the features that are on, in catalog order."""
+    groups = {}
+    for feature in kit['feature_details']:
+        if feature['enabled']:
+            groups.setdefault(feature['category'], []).append(feature)
+    return list(groups.items())
+
+
+def _admin_tools(user):
+    """The admin pages (kit 'admin_links') this caller may open, by the levels in force now."""
+    rules = {rule.endpoint: rule.rule for rule in app.url_map.iter_rules()}
+    return features.group_links([link for link in features.admin_links()
+                                 if link['endpoint'] in rules and permissions.may_make('GET', rules[link['endpoint']], user)])
+
+
+@app.route('/help/')
+def help_page():
+    """The Q&A guide to every feature. Open to anyone, so people can learn before they sign in."""
+    kit = features.kit_info()
+    return render_template("help.html", kit=kit, enabled=kit['features'], api_base=request.host_url.rstrip('/'))
+
+
 @app.route('/')  # connects default URL to index() function
 def index():
-    print("Home:", current_user)
-    return render_template("index.html")
+    kit = features.kit_info()
+    user = current_user if current_user.is_authenticated else None
+    return render_template("index.html", kit=kit, feature_groups=_features_by_category(kit),
+                           admin_tools=_admin_tools(user), api_base=request.host_url.rstrip('/'))
 
 
 

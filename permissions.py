@@ -142,6 +142,16 @@ def caller_rank(user):
 ERROR_NAMES = {401: 'Unauthorized', 403: 'Forbidden', 503: 'Service Unavailable'}
 
 
+def may_make(method, rule, user):
+    """Whether a caller (a user, or None for no account) may make a request, by the level that applies now.
+    False when the request is unlisted or the stored levels cannot be read."""
+    try:
+        level = effective_level(method, rule)
+    except Exception:
+        return False
+    return level is not None and caller_rank(user) >= RANK[level]
+
+
 def _refuse(message, status):
     return {'message': message, 'data': None, 'error': ERROR_NAMES[status]}, status
 

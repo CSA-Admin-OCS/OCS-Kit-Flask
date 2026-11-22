@@ -163,11 +163,13 @@
           },
           {
             "label": "Permissions",
-            "endpoint": "permissions_admin.page"
+            "endpoint": "permissions_admin.page",
+            "group": "Web Security"
           },
           {
             "label": "CORS",
-            "endpoint": "cors_admin.page"
+            "endpoint": "cors_admin.page",
+            "group": "Web Security"
           }
         ]
       }

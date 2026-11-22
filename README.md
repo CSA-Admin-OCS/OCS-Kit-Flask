@@ -20,7 +20,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-On first boot, `entrypoint.sh` creates the SQLite database and one seeded account per role. The kit picks their default uids (see [Roles](#roles)), and `ADMIN_UID`, `TEACHER_UID` and `USER_UID` override them. The backend listens on <http://localhost:8587>. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
+On first boot, `entrypoint.sh` creates the SQLite database and one seeded account per role. The kit picks their default uids (see [Roles](#roles)), and `ADMIN_UID`, `TEACHER_UID` and `USER_UID` override them. The backend listens on <http://localhost:8587>. Its home page introduces the backend: your organization and kit, the three roles, the features that are on, the admin tools the signed-in person may open, and a short API example. The **Q&A** page at <http://localhost:8587/help/> answers how to use every feature, and anyone can open it. Log in to the admin UI at <http://localhost:8587/login> with the admin account.
 
 The compose file also starts:
 - `socketio` on port 8500, used by the multiplayer features
@@ -203,14 +203,14 @@ Responses use only the new names. Requests, imports and old exports that still u
 All the wiring lives in [`kits/catalog.json`](kits/catalog.json). `main.py` and `scripts/db_init.py` read it and need no edits.
 
 1. Add the feature to the canonical `OCS-Kit/kits/catalog.json`: id, name, category, labels, description and `setup` guide. Add it to the kit presets that should include it. Copy everything except the `flask` blocks verbatim into this repo's `kits/catalog.json`.
-2. Write the code: a blueprint in `api/`, and any models in `model/`. Add each route to [`permissions.json`](#permissions) at the level that may use it (a route in no list is refused). For role checks inside a route, use `roles.py` or `user.is_admin()`/`is_staff()` instead of role names.
+2. Write the code: a blueprint in `api/`, and any models in `model/`. Add each route to [`permissions.json`](#permissions) at the level that may use it (a route in no list is refused). If the feature has a blueprint of its own, add a section about it to `templates/help.html` (the Q&A guide); a test fails without one. For role checks inside a route, use `roles.py` or `user.is_admin()`/`is_staff()` instead of role names.
 3. In this repo's catalog, under the feature's `"flask"` block, list:
    - `blueprints`: `"api.my_api:my_api"`. Requests return 404 while the feature is off. Each blueprint has exactly one owning feature.
    - `uses_blueprints` (optional): blueprints owned by another feature that this feature also needs. They are served when either feature is on.
    - `models`: `"model.my_model"`. These are always imported, so their tables always exist.
    - `seed`: `"model.my_model:initMyThings"`. These run from `db_init.py`, and when an admin turns the feature on while its tables are empty.
    - `startup` (optional): functions that run at app start and when the feature is turned on.
-   - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar.
+   - `admin_links` (optional): `{"label": "My Page", "endpoint": "my_api.my_page"}` adds a link to the admin navbar. Add `"group": "Web Security"` (any name) to put it in a sub-menu of that name; links that share a group share one sub-menu.
 4. Run `python -m features --check`, `python -m permissions --check` and `python -m pytest tests`. The features check fails on:
    - unknown ids, categories or labels, and kit roles that don't match the canonical ones
    - references that don't import
@@ -267,6 +267,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
 | `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
 | `roles.py` | Role names and per-kit labels from the catalog |
+| `templates/help.html` | The Q&A guide at `/help/`; a feature with a blueprint of its own needs a section here (a test checks) |
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
 | `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
 | `cors.py`, `api/cors_admin.py`, `templates/cors.html`, `model/cors_setting.py` | The CORS headers, the admin CORS page and API, and the origins admins saved |

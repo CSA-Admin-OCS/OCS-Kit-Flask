@@ -19,6 +19,7 @@
     "GET /api/students",
     "POST /api/user",
     "POST /api/user/guest",
+    "GET /help/",
     "GET /login",
     "POST /login",
     "GET /logout",

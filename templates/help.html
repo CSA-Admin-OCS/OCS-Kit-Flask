@@ -1,0 +1,335 @@
+{% extends "layouts/base.html" %}
+{% set project = "Q&A" %}
+
+{# One question and its answer: {% call qa("Question?") %}answer{% endcall %} #}
+{% macro qa(question) %}
+<details class="qa border-bottom py-2">
+    <summary class="fw-semibold">{{ question }}</summary>
+    <div class="qa-body pt-2 pb-1">{{ caller() }}</div>
+</details>
+{% endmacro %}
+
+{# A group of questions. feature: the kit feature the group is about; it is marked when that feature is off #}
+{% macro section(id, title, feature=None) %}
+<div class="card mb-4 qa-section" id="{{ id }}">
+    <div class="card-header d-flex align-items-center gap-2">
+        <strong>{{ title }}</strong>
+        {% if feature and feature not in enabled %}<span class="badge bg-secondary">off in this kit</span>{% endif %}
+    </div>
+    <div class="card-body py-2">{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{% block body %}
+<div class="container py-5">
+
+    <div class="card mb-4">
+        <div class="card-body p-4">
+            <h1 class="display-6"><strong>How to use the backend</strong></h1>
+            <p class="lead mb-3">Questions and answers for every feature of the OCS-in-a-Kit backend. Open a question to read the answer.</p>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <input id="search" type="search" class="form-control" style="max-width: 24rem" placeholder="Search the questions">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Back to the home page</a>
+            </div>
+            <p class="small mt-3 mb-0">
+                Jump to:
+                <a href="#start">Getting started</a> &middot;
+                <a href="#accounts">Accounts</a> &middot;
+                <a href="#admin">Administration</a> &middot;
+                <a href="#security">Web security</a> &middot;
+                <a href="#features">Features</a> &middot;
+                <a href="#run">Running it</a>
+            </p>
+        </div>
+    </div>
+
+    {% call section("start", "Getting started") %}
+        {% call qa("What is this backend?") %}
+        <p>The service behind your site. It keeps the accounts, signs people in, decides who may do what, and stores the data
+        each feature needs. The pages you open here are for admins; the rest of your site talks to it through the REST API under
+        <code>/api</code>. The home page shows your organization, your kit and what is switched on.</p>
+        {% endcall %}
+        {% call qa("How do I sign in?") %}
+        <p>On these pages, use <a href="{{ url_for('login') }}">Login</a>. From code, send your username and password:</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -c jar -X POST {{ api_base }}/api/authenticate \
+  -H 'Content-Type: application/json' -H 'X-Origin: client' \
+  -d '{"uid": "your-uid", "password": "your-password"}'
+curl -b jar {{ api_base }}/api/id</code></pre>
+        <p class="mb-0">The first call saves a cookie in <code>jar</code>; the second asks who you are. A wrong password answers 401.</p>
+        {% endcall %}
+        {% call qa("How do I sign out?") %}
+        <p class="mb-0">On these pages, use <b>Logout</b> in the top-right menu. From code, <code>DELETE /api/authenticate</code>
+        invalidates your token cookie.</p>
+        {% endcall %}
+        {% call qa("What are the roles?") %}
+        <p>Every account has one of three roles. This kit calls them
+        <b>{{ kit.roles.admin.label }}</b> (runs the site and is the only one who can change features, permissions and CORS),
+        <b>{{ kit.roles.staff.label }}</b> (day-to-day work: sections, classrooms, grading, approvals) and
+        <b>{{ kit.roles.member.label }}</b> (a regular user). New sign-ups get <b>{{ kit.roles[kit.signup_role].label }}</b>.
+        A higher role can do everything a lower one can.</p>
+        {% endcall %}
+        {% call qa("What makes a good password?") %}
+        <p class="mb-0">At least 8 characters with an uppercase letter, a lowercase letter, a number and one of
+        <code>` ~ ! @ # $ % ^ & * ( )</code>. Anything weaker is refused with a 400. Spring and Pages use the same rule.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("accounts", "Accounts and profiles") %}
+        {% call qa("How does someone sign up?") %}
+<pre class="bg-dark text-light rounded p-3"><code>curl -X POST {{ api_base }}/api/user -H 'Content-Type: application/json' \
+  -d '{"name": "Ada Lovelace", "uid": "ada", "password": "Sup3r!secret", "email": "ada@example.org"}'</code></pre>
+        <p class="mb-0">The account gets the kit's sign-up role. If the admin limited sign-ups to certain email domains
+        (<code>ALLOWED_EMAIL_DOMAINS</code> in <code>.env</code>), other addresses are refused. <code>POST /api/user/guest</code>
+        makes a guest account from just a username and password.</p>
+        {% endcall %}
+        {% call qa("How do I see and change my own profile?") %}
+        <p><code>GET /api/id</code> returns your account. <code>PUT /api/user</code> changes it; send only what changes:</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X PUT {{ api_base }}/api/user -H 'Content-Type: application/json' \
+  -d '{"name": "Ada L.", "organization": "Analytical Engines Ltd"}'</code></pre>
+        <p class="mb-0">You can change <code>name</code>, <code>email</code>, <code>sid</code>, <code>password</code>,
+        <code>organization</code> and <code>class</code>. Only an admin can change another person's account.</p>
+        {% endcall %}
+        {% call qa("What is the organization field?") %}
+        <p class="mb-0">The name of the organization an account belongs to. <code>GET</code> or <code>POST /api/organization</code>
+        reads or sets it. Classrooms are visible to people of the same organization. The old names <code>school</code> and
+        <code>/api/school</code> still work, so older sites keep running.</p>
+        {% endcall %}
+        {% call qa("How do I set a profile picture?") %}
+        <p class="mb-0"><code>PUT /api/id/pfp</code> with <code>{"pfp": "&lt;base64 image&gt;"}</code> sets it, <code>GET /api/id/pfp</code>
+        returns it, and an admin can remove one with <code>DELETE /api/id/pfp?uid=...</code>.</p>
+        {% endcall %}
+        {% call qa("What are sections, and how do I join one?") %}
+        <p>Sections are groups, such as a class or a team. An admin creates one:</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X POST {{ api_base }}/api/section -H 'Content-Type: application/json' \
+  -d '{"name": "Computer Science A", "abbreviation": "CSA"}'</code></pre>
+        <p class="mb-0"><code>GET /api/section</code> lists them. A person joins with
+        <code>POST /api/user/section</code> and <code>{"sections": ["CSA"]}</code>, and sees theirs with
+        <code>GET /api/user/section</code>. Admins can browse sections on the <a href="{{ url_for('sections') }}">Sections</a> page.</p>
+        {% endcall %}
+        {% call qa("How do classrooms work? (" ~ kit.roles.staff.label ~ ")") %}
+        <p>A classroom is a named group of people owned by a staff member, tied to their organization.</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X POST {{ api_base }}/api/classrooms/ -H 'Content-Type: application/json' -d '{"name": "Period 1"}'
+curl -b jar -X POST {{ api_base }}/api/classrooms/1/students/7      # add the person with id 7
+curl -b jar {{ api_base }}/api/classrooms/1/students                 # list them</code></pre>
+        <p class="mb-0">Staff and admins create, rename, delete and change who is in a classroom; members can read the classrooms of their own organization.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("admin", "Administration (" ~ kit.roles.admin.label ~ ")") %}
+        {% call qa("Where do I manage users?") %}
+        <p class="mb-0">In the <b>Data</b> menu, open <a href="{{ url_for('u2table') }}">User Management</a>. It lists every account, and an admin
+        can edit, delete or reset the password of any of them. A reset sets the password to the default from <code>.env</code>
+        (<code>DEFAULT_PASSWORD</code>), and the person should change it at once.</p>
+        {% endcall %}
+        {% call qa("What happens when I delete a user?") %}
+        <p class="mb-0">An admin cannot delete their own account. A person who still owns records, such as posts or classrooms, is kept
+        and the answer says so (a 409) instead of pretending it worked. Delete or reassign those first.</p>
+        {% endcall %}
+        {% call qa("How do I turn features on or off, or switch kits?") %}
+        <p>A kit is a preset list of features: <b>vanilla</b> (accounts only), <b>education</b> and <b>business</b>.
+        <code>GET /api/kit</code> shows what is on. An admin changes it with no restart:</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X PUT {{ api_base }}/api/kit/admin/features -H 'Content-Type: application/json' \
+  -d '{"features": {"social": false}}'
+curl -b jar -X PUT {{ api_base }}/api/kit/admin/kit -H 'Content-Type: application/json' -d '{"kit": "business"}'</code></pre>
+        <p class="mb-0">A feature that is off answers 404 and keeps its data. A kit switch never touches accounts.
+        <code>GET /api/kit/admin</code> shows what each feature needs to work.</p>
+        {% endcall %}
+        {% call qa("How do I back up, move or restore the data?") %}
+        <p>Admins can download everything with <code>GET /api/export/all</code>, and load it with <code>POST /api/export/import</code>.
+        For a whole database move, use the scripts in <code>scripts/</code>:
+        <code>db_migrate-prod2sqlite.py</code> pulls a server's data into a local file, and <code>db_restore-sqlite2prod.py</code>
+        pushes it back.</p>
+        <p class="mb-0"><b>Careful:</b> <code>scripts/db_init.py</code> drops every table and rebuilds the database. It asks first,
+        and backs up before it drops.</p>
+        {% endcall %}
+        {% call qa("How do people send feedback?") %}
+        <p class="mb-0"><code>POST /api/feedback/</code> with a <code>title</code>, a <code>body</code>, and optionally a
+        <code>type</code> (Bug, Feature Request, Inquiry or Other) and a <code>uid</code>. It can be anonymous. If a GitHub repository
+        and token are set in <code>.env</code> it also opens an issue. Staff read all feedback with <code>GET /api/feedback/all</code>.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("security", "Web security") %}
+        {% call qa("How do I change who can use something?") %}
+        <p>In the <b>Data</b> menu, under <b>Web Security</b>, open <a href="{{ url_for('permissions_admin.page') }}">Permissions</a>.
+        Every request is listed, grouped by feature. Pick a level, press Save, and it applies on the next request:</p>
+        <ul>
+            <li><b>public</b>: anyone, signed in or not</li>
+            <li><b>{{ kit.roles.member.label }}</b>: any signed-in account</li>
+            <li><b>{{ kit.roles.staff.label }}</b>: staff and admin</li>
+            <li><b>{{ kit.roles.admin.label }}</b>: admin only</li>
+        </ul>
+        <p class="mb-0">Rows are <b>green</b> when a level has been decided, <b>yellow</b> when nobody has decided yet (open to anyone until
+        someone does), and <b>red</b> when locked (login and the page itself, so you cannot lock yourself out). <b>Reset</b> goes back to
+        the level in <code>permissions.json</code>. A route with its own check in code keeps that check, so the page can always make
+        something stricter, but can only make it more open where the code has no check of its own.</p>
+        {% endcall %}
+        {% call qa("I added a route and it answers 403 saying it is not in permissions.json.") %}
+        <p class="mb-0">A request in no list is refused for everyone, so a new route is never open by accident. Add it to
+        <code>permissions.json</code> under the level that should use it, then run <code>python -m permissions --check</code>.</p>
+        {% endcall %}
+        {% call qa("My website gets a CORS error in the browser.") %}
+        <p>Browsers only let a website call this backend if its <b>origin</b> is allowed. In the <b>Data</b> menu, under
+        <b>Web Security</b>, open <a href="{{ url_for('cors_admin.page') }}">CORS</a>, type the site's origin, press Add and then Save.
+        It applies on the next request.</p>
+        <p class="mb-0">An origin is the scheme, host and port with no path and no trailing slash:
+        <code>https://pages.example.org</code>, <code>http://localhost:4500</code>. Anything else is refused with a message saying what to fix.
+        <b>Reset</b> forgets your list so the <code>CORS_ORIGINS</code> setting in <code>.env</code> decides again.</p>
+        {% endcall %}
+        {% call qa("Who changed a setting, and when?") %}
+        <p class="mb-0">Both pages end with <b>Recent changes</b>, a log of who changed what. Feature changes are in
+        <code>GET /api/kit/admin</code> under <code>recent_changes</code>.</p>
+        {% endcall %}
+    {% endcall %}
+
+    <div id="features"></div>
+
+    {% call section("social", "Social: microblogs, posts and personas", "social") %}
+        {% call qa("How do I post a short update (microblog)?") %}
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X POST {{ api_base }}/api/microblog -H 'Content-Type: application/json' \
+  -d '{"content": "Shipped the new login page!", "topicPath": "/blog/login"}'</code></pre>
+        <p class="mb-0">A post is at most 280 characters. <code>topicPath</code> files it under a page, and the topic is created for you.
+        Read a page's posts with <code>GET /api/microblog/page/&lt;page_key&gt;</code>, reply with <code>POST /api/microblog/reply</code>,
+        and react with <code>POST /api/microblog/reaction</code>. You can change or delete your own posts; admins can change anyone's.</p>
+        {% endcall %}
+        {% call qa("What are posts, and how are they different?") %}
+        <p class="mb-0"><code>POST /api/post</code> with <code>{"content": "...", "pageUrl": "...", "pageTitle": "..."}</code> makes a longer post
+        tied to a page, and <code>POST /api/post/reply</code> replies. <code>GET /api/post/all</code> lists them,
+        <code>GET /api/post/page?url=...</code> lists a page's, and <code>GET /api/post/user/&lt;id&gt;</code> lists one person's.</p>
+        {% endcall %}
+        {% call qa("What are personas?") %}
+        <p class="mb-0">Descriptions of working styles that people pick to describe themselves.
+        <code>GET /api/persona</code> lists them, and <code>POST /api/user/persona</code> with
+        <code>{"persona_id": 3, "weight": 2}</code> picks one. Admins manage them on the
+        <a href="{{ url_for('persona_admin.persona') }}">Personas</a> page. Staff can ask
+        <code>POST /api/persona/form-groups</code> to build balanced groups from people's personas.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("ai", "AI chat and grading", "ai-chatbot") %}
+        {% call qa("How do I ask the AI a question?") %}
+        <p>You need to be signed in, and an admin must have set <code>GEMINI_API_KEY</code> and/or <code>GROQ_API_KEY</code> in
+        <code>.env</code>. Without a key the feature turns itself off.</p>
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X POST {{ api_base }}/api/gemini -H 'Content-Type: application/json' \
+  -d '{"text": "Explain what a blueprint is in Flask", "prompt": "Answer in two sentences."}'
+curl -b jar -X POST {{ api_base }}/api/groq/chat -H 'Content-Type: application/json' \
+  -d '{"messages": [{"role": "user", "content": "Hello"}]}'</code></pre>
+        <p class="mb-0"><code>GET /api/gemini/health</code> and <code>GET /api/groq/health</code> tell you whether the provider is reachable.</p>
+        {% endcall %}
+        {% call qa("How does AI grading work? (" ~ kit.roles.staff.label ~ ")") %}
+        <p class="mb-0">Staff send a batch of submissions to <code>POST /api/gemini/summarize-submissions</code> as form fields
+        (<code>id_0</code>, <code>type_0</code>, <code>text_0</code> or <code>file_0</code>, then <code>id_1</code>, and so on) and get a summary of each.
+        It uses the same Gemini key as the chat. If <b>AI chatbot</b> is off, turning on <b>AI grading</b> still serves Gemini.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("code", "Running code", "code-runner") %}
+        {% call qa("How do I run Python or JavaScript?") %}
+<pre class="bg-dark text-light rounded p-3"><code>curl -b jar -X POST {{ api_base }}/run/python -H 'Content-Type: application/json' \
+  -d '{"code": "print(2 + 2)"}'
+curl -b jar -X POST {{ api_base }}/run/javascript -H 'Content-Type: application/json' \
+  -d '{"code": "console.log(2 + 2)"}'</code></pre>
+        <p class="mb-0">You must be signed in. On a public server the code runs in a separate locked-down container
+        (<code>code_runner</code>), never in the web server, and is stopped if it runs too long. Empty code answers 400.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("games", "Games", "game-engine") %}
+        {% call qa("How do the AI characters (NPCs) work?") %}
+        <p class="mb-0"><code>POST /api/ainpc/prompt</code> with <code>{"prompt": "...", "session_id": "abc", "npc_type": "wizard"}</code> returns the
+        character's reply and remembers the conversation for that <code>session_id</code>. <code>npc_type</code> is one of
+        history, merchant, guard, wizard, innkeeper or default. <code>POST /api/ainpc/greeting</code> starts over with a greeting,
+        <code>POST /api/ainpc/reset</code> clears the memory, and <code>GET /api/ainpc/test</code> checks the AI is configured.</p>
+        {% endcall %}
+        {% call qa("How do I save a player's progress?") %}
+        <p class="mb-0">A signed-in player's game profile is one JSON document: <code>GET /api/profile/game</code> loads it (404 if there is none yet),
+        and <code>POST</code> or <code>PUT</code> saves it.</p>
+        {% endcall %}
+        {% call qa("How do leaderboards work?") %}
+        <p class="mb-0"><code>GET /api/dynamic/leaderboard?gameName=pong&amp;limit=10</code> lists scores. A signed-in player adds one with
+        <code>POST /api/dynamic/leaderboard</code> and <code>{"payload": {"score": 120, "gameName": "pong"}}</code>.
+        <code>/api/events/ELEMENTARY_LEADERBOARD</code> works the same way for the elementary board, and a signed-in person can remove an entry from it with <code>DELETE /api/events/ELEMENTARY_LEADERBOARD/&lt;id&gt;</code>.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("analytics", "Analytics and skills", "analytics") %}
+        {% call qa("What is a skill passport?") %}
+        <p class="mb-0"><code>GET /api/user/skill-passport</code> returns your current skills and your history. <code>POST /api/user/skill-snapshot</code>
+        records a new snapshot. An admin can read anyone's with <code>GET /api/admin/skill-passport/&lt;user id&gt;</code>.</p>
+        {% endcall %}
+        {% call qa("How do I see someone's GitHub activity?") %}
+        <p class="mb-0"><code>GET /api/analytics/github/user</code> (and <code>/commits</code>, <code>/prs</code>, <code>/issues</code>,
+        <code>/issue_comments</code>) reads the signed-in person's public GitHub activity. Staff can read an organization with
+        <code>/api/analytics/github/org/&lt;name&gt;/repos</code> and <code>/users</code>, and admins can read any person's commits and issues.
+        These need <code>GITHUB_TOKEN</code> set in <code>.env</code>; without it they answer that the token is not set.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("study", "Assignments and study tracking", "assignments") %}
+        {% call qa("How do I track what someone has studied?") %}
+<pre class="bg-dark text-light rounded p-3"><code>curl -X POST {{ api_base }}/api/study -H 'Content-Type: application/json' \
+  -d '{"topic": "Flask", "subtopic": "Blueprints", "studied": true, "timestamp": "2026-11-22T10:00:00Z"}'
+curl {{ api_base }}/api/study/stats</code></pre>
+        <p class="mb-0"><code>GET /api/study</code> lists records, and <code>DELETE /api/study/&lt;id&gt;</code> removes one of yours.
+        Anyone can use it today; whether it should need a sign-in is still undecided (it is the <i>unreviewed</i> group on the Permissions page).</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("examples", "Teaching examples", "examples") %}
+        {% call qa("What are the jokes, students and congrats endpoints?") %}
+        <p class="mb-0">Small practice APIs with no real data, for learning how a REST API behaves:
+        <code>GET /api/jokes</code>, <code>/api/jokes/random</code>, <code>/api/jokes/count</code>,
+        <code>GET /api/students</code>, <code>/api/student/john</code> and <code>GET /api/congrats</code> are open to anyone.
+        Adding or rating a joke needs a sign-in.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("elsewhere", "Features this backend does not serve") %}
+        {% call qa("Where are lessons, calendar, hall pass, finance simulation, resume and face recognition?") %}
+        <p class="mb-0">They have no code in this backend. The Pages site and the Spring backend serve them, and this backend only knows whether
+        each is switched on (<code>GET /api/kit</code>). The same goes for Kasm virtual desktops, which this backend no longer has any code for.</p>
+        {% endcall %}
+    {% endcall %}
+
+    {% call section("run", "Running it") %}
+        {% call qa("How do I start it on my own computer?") %}
+<pre class="bg-dark text-light rounded p-3"><code>python -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # set ORG_NAME and, for a public server, the secrets
+python scripts/db_init.py       # creates the tables and one account per role
+python main.py                  # http://localhost:8587</code></pre>
+        <p class="mb-0">In development an unset password is <code>123Qwerty!</code>. With Docker, copy <code>.env.example</code> to <code>.env</code> and run
+        <code>docker compose up -d --build</code>; the first boot creates the database. Restart the server after you change Python code.</p>
+        {% endcall %}
+        {% call qa("What must I set before going public?") %}
+        <p class="mb-0">Set <code>IS_PRODUCTION=true</code>, which then requires <code>SECRET_KEY</code>, <code>ADMIN_PASSWORD</code> and
+        <code>DEFAULT_PASSWORD</code>; list your website under CORS; put nginx in front (a template is in <code>deploy/</code>); and
+        optionally limit sign-ups to your email domains. The README has the full checklist.</p>
+        {% endcall %}
+        {% call qa("How do I check that everything is wired up?") %}
+        <p class="mb-0"><code>python -m features --list</code> shows the kits and features, <code>python -m permissions --check</code> checks the
+        permission file against the routes, and <code>python -m pytest tests</code> runs the tests.</p>
+        {% endcall %}
+    {% endcall %}
+
+</div>
+
+<script>
+// Filter the questions as you type; a section with no match is hidden, and matching questions open
+(function () {
+    const box = document.getElementById("search");
+    box.addEventListener("input", function () {
+        const text = box.value.trim().toLowerCase();
+        document.querySelectorAll(".qa").forEach(function (item) {
+            const hit = !text || item.textContent.toLowerCase().includes(text);
+            item.style.display = hit ? "" : "none";
+            item.open = Boolean(text) && hit;
+        });
+        document.querySelectorAll(".qa-section").forEach(function (card) {
+            const any = Array.from(card.querySelectorAll(".qa")).some(function (item) { return item.style.display !== "none"; });
+            card.style.display = any ? "" : "none";
+        });
+    });
+})();
+</script>
+{% endblock %}

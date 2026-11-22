@@ -444,6 +444,22 @@ def admin_links():
     return links
 
 
+def group_links(links):
+    """Admin links as a menu: links without a 'group' stay as they are, and links that share a 'group' become one
+    entry {'group': name, 'links': [...]} placed where the group's first link was."""
+    menu, groups = [], {}
+    for link in links:
+        name = link.get('group')
+        if not name:
+            menu.append(link)
+        elif name in groups:
+            groups[name]['links'].append(link)
+        else:
+            groups[name] = {'group': name, 'links': [link]}
+            menu.append(groups[name])
+    return menu
+
+
 # --- CLI ----------------------------------------------------------------------
 
 def check(canonical_path=CANONICAL_PATH, require_canonical=False):
@@ -562,6 +578,8 @@ def check(canonical_path=CANONICAL_PATH, require_canonical=False):
             if not {'label', 'endpoint'} <= set(link):
                 problems.append(f"feature '{fid}': admin link {link} needs 'label' and 'endpoint'")
                 continue
+            if 'group' in link and not (isinstance(link['group'], str) and link['group'].strip()):
+                problems.append(f"feature '{fid}': admin link {link['label']!r} has a 'group' that is not a name")
             bp_name = link['endpoint'].rpartition('.')[0]
             if bp_name and blueprint_owner.get(bp_name) != fid:
                 problems.append(f"feature '{fid}': admin link endpoint '{link['endpoint']}' is not in one of its blueprints")
