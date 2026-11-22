@@ -45,6 +45,7 @@ runner/
 socket/
 
 # Not needed at runtime
+branding/
 tests/
 datasets/
 deploy/

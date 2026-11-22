@@ -6,8 +6,11 @@
 
     <!-- What this is, and the state it is in -->
     <div class="card mb-4">
+        <div class="text-center py-4 rounded-top border-bottom" style="background: #fff">
+            <img src="{{ url_for('static', filename='assets/ocs_backend_logo.png') }}" alt="" class="img-fluid" style="max-height: 190px">
+        </div>
         <div class="card-body p-4">
-            <h1 class="display-6"><strong>OCS-in-a-Kit Backend</strong></h1>
+            <h1 class="visually-hidden">OCS-in-a-Kit Backend</h1>
             <p class="lead mb-3">
                 The service behind your site: accounts and sign-in, roles and permissions, and the data each
                 feature stores.

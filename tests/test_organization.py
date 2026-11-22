@@ -101,7 +101,7 @@ def test_the_navbar_logo_comes_from_org_logo_url(app, monkeypatch):
 @pytest.mark.parametrize('env,expected', [
     ({'ORG_NAME': 'New', 'SCHOOL_NAME': 'Old', 'ORG_LOGO_URL': '/new.svg', 'SCHOOL_LOGO_URL': '/old.svg'}, ('New', '/new.svg')),
     ({'ORG_NAME': '', 'SCHOOL_NAME': 'Old', 'ORG_LOGO_URL': '', 'SCHOOL_LOGO_URL': '/old.svg'}, ('Old', '/old.svg')),
-    ({'ORG_NAME': '', 'SCHOOL_NAME': '', 'ORG_LOGO_URL': '', 'SCHOOL_LOGO_URL': ''}, ('OCS Kit', '/static/assets/kit_logo.svg')),
+    ({'ORG_NAME': '', 'SCHOOL_NAME': '', 'ORG_LOGO_URL': '', 'SCHOOL_LOGO_URL': ''}, ('OCS Kit', '/static/assets/ocs_backend_mark.png')),
 ], ids=['new-names-win', 'old-names-still-work', 'defaults'])
 def test_settings_accept_the_old_env_names(env, expected):
     code = "from __init__ import app; print(app.config['ORG_NAME'], app.config['ORG_LOGO_URL'], sep='|')"

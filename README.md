@@ -1,3 +1,5 @@
+<p align="center"><img src="static/assets/ocs_backend_logo.png" alt="OCS-in-a-Kit Backend" width="460"></p>
+
 # OCS Kit - Flask Backend
 
 The Python/Flask backend of OCS-in-a-Kit. It provides:
@@ -287,6 +289,7 @@ curl -i -X POST http://localhost:8587/api/authenticate \
 | `features.py`, `kits/catalog.json` | Kit feature registry (`python -m features --list` / `--check`) |
 | `tests/` | `python -m pytest tests` (uses a throwaway database, never your `.env` or `instance/`) |
 | `roles.py` | Role names and per-kit labels from the catalog |
+| `branding/`, `scripts/make_logo_assets.py` | The source logo (on white) and the one-off script that makes the transparent web logos in `static/assets/` from it (needs Pillow and numpy; the PNGs are committed) |
 | `templates/help.html` | The Q&A guide at `/help/`; a feature with a blueprint of its own needs a section here (a test checks) |
 | `permissions.json`, `permissions.py` | Who may make each request, and the check that runs before every request |
 | `api/permissions_admin.py`, `templates/permissions.html`, `model/permission_override.py` | The admin Permissions page, its API, and the levels admins changed |
