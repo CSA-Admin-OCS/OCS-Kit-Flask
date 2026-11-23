@@ -174,6 +174,10 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 app.config['DATA_FOLDER'] = os.path.join(app.instance_path, 'data')
 os.makedirs(app.config['DATA_FOLDER'], exist_ok=True)
 
+# Folder of the default SQLite database. The Docker entrypoint makes it too; without it a local first run fails with
+# "unable to open database file", because SQLite creates the file but not its folder.
+os.makedirs(os.path.join(app.instance_path, 'volumes'), exist_ok=True)
+
 
 # GITHUB settings
 app.config['GITHUB_API_URL'] = 'https://api.github.com'
