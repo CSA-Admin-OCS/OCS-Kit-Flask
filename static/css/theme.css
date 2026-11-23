@@ -54,7 +54,9 @@ code { color: var(--code); }
 .dropdown-menu:not(.dropdown-menu-dark) .dropdown-item { color: var(--text); }
 .dropdown-menu:not(.dropdown-menu-dark) .dropdown-item:hover { background-color: var(--surface-2); }
 
-/* outline buttons: Bootstrap's gray and red are a little too faint on a light page */
+/* outline buttons: Bootstrap's blue, gray and red are a little too faint on a light page */
+.btn-outline-primary { color: var(--link); border-color: var(--link); }
+.btn-outline-primary:hover { background-color: var(--link); border-color: var(--link); color: #fff; }
 .btn-outline-secondary { color: var(--muted); border-color: #8a949e; }
 .btn-outline-secondary:hover { background-color: #5c6773; border-color: #5c6773; color: #fff; }
 .btn-outline-danger { color: #b02a37; border-color: #b02a37; }
@@ -74,6 +76,13 @@ code { color: var(--code); }
 .navbar-light .navbar-nav .nav-link { color: var(--nav-text); }
 .navbar-light .navbar-nav .nav-link:hover, .navbar-light .navbar-nav .nav-link:focus { color: var(--nav-text-hover); }
 .navbar .link-dark { color: var(--text) !important; }
+
+/* On a phone the search box, the user name and the switch must fit on one line without widening the page. */
+@media (max-width: 575px) {
+    .navbar #search { width: 6.5rem; }
+    .navbar-brand { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a long ORG_NAME shortens instead of widening the page */
+    .navbar .px-3 { padding-left: .5rem !important; padding-right: .5rem !important; }
+}
 
 /* ---- the sun / moon switch in the navbar ------------------------------------------------------------------------- */
 .theme-toggle i { font-size: .95rem; color: var(--nav-icon); }

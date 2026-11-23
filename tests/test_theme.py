@@ -98,5 +98,15 @@ def test_every_text_colour_is_readable_on_the_colours_it_sits_on(theme):
     assert too_faint == []
 
 
+def test_the_navbar_shrinks_on_a_phone_instead_of_widening_the_page():
+    assert re.search(r'@media \(max-width: 575px\)\s*\{[^}]*\.navbar #search\s*\{[^}]*width', _css(), re.S)
+    assert re.search(r'@media \(max-width: 575px\)\s*\{.*?\.navbar-brand\s*\{[^}]*text-overflow:\s*ellipsis', _css(), re.S)
+
+
+def test_outline_buttons_use_the_readable_link_colour_in_both_themes():
+    """Bootstrap's own blue on the light page background is 4.0 to 1; the theme's link colour clears 4.5."""
+    assert re.search(r'\.btn-outline-primary\s*\{[^}]*color:\s*var\(--link\)', _css())
+
+
 def test_both_themes_define_the_same_variables():
     assert set(_variables('light')) == set(_variables('dark'))
