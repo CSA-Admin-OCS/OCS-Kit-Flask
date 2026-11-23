@@ -1,0 +1,93 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+The tests run against a throwaway database and a fixed set of settings, never the <code class="file">.env</code> or <code class="file">instance/</code>. This guide is itself tested: the files, routes, settings and commands it names are checked against the code,
+so it fails the build the day it stops being true.
+{% endcall %}
+
+{{ topic("Running them") }}
+{% call section("Running the tests") %}
+{% call code() %}pip install pytest
+python -m pytest tests                       # everything
+python -m pytest tests/test_roles.py -q      # one file
+python -m pytest tests -k "tier" -q          # tests whose name contains "tier"{% endcall %}
+<p><code>pytest</code> is not in <code class="file">requirements.txt</code> because the running app does not use it. The suite takes about a minute.</p>
+{% endcall %}
+
+{% call section("The known failing test") %}
+<p><code>test_catalog_matches_code</code> asks the feature checker to import every module the catalog names, and the grading module needs <code>pandas</code> and <code>scikit-learn</code>. Both are listed in <code class="file">requirements.txt</code>, so an environment installed from the current file has them. In one set up earlier, run
+<code class="cmd">pip install -r requirements.txt</code> again and the test passes; until then it is the only failure.</p>
+{% endcall %}
+
+{{ topic("How they are set up") }}
+{% call section("Shared setup") %}
+<p><code class="file">tests/conftest.py</code> runs before the app is imported:</p>
+<ul>
+    <li>It points <code class="env">SQLALCHEMY_DATABASE_URI</code> at a temporary SQLite file and sets <b>every</b> setting the app reads, to blank or a fixed value, so a developer's <code>.env</code> or a running stack cannot leak in.</li>
+    <li>The kit under test is <b>education</b> with <code>FEATURES=+examples,+kasm,-hallpass,-social</code>, in development mode, with the password <code>123Qwerty!</code> for every account.</li>
+    <li>The <code>app</code> fixture creates the tables and seeds the three accounts once per session. Their uids are <code>admin</code>, <code>teacher</code> and <code>student</code> in this kit.</li>
+    <li>An automatic fixture clears everything admins can change (feature overrides, the stored kit, permission changes, the CORS list, roles and their logs) before and after every test, so tests do not affect each other.</li>
+    <li><code>login(app, uid)</code> returns a test client signed in as that account, or anonymous for <code>None</code>.</li>
+</ul>
+<p>What the fixture does <b>not</b> clear is accounts and content a test creates: a test that makes a user or a post deletes it afterwards.</p>
+{% endcall %}
+
+{{ topic("What they cover") }}
+{% call section("Test files") %}
+<table>
+    <tr><th>File</th><th>Covers</th></tr>
+    <tr><td><code class="file">tests/test_admin_pages.py</code></td><td>the server-rendered admin pages: who may open which, and the organization name in the navbar</td></tr>
+    <tr><td><code class="file">tests/test_cors.py</code></td><td>origin rules, the headers, the CORS page and API, failing closed</td></tr>
+    <tr><td><code class="file">tests/test_delete_user.py</code></td><td>deleting a user: the 409, no self-delete, bad bodies, foreign keys enforced</td></tr>
+    <tr><td><code class="file">tests/test_edit_menu.py</code></td><td>the user table's Edit menu and what each viewer is offered</td></tr>
+    <tr><td><code class="file">tests/test_features.py</code></td><td>kit and feature resolution, the catalog against the code (the test that needs the grading packages)</td></tr>
+    <tr><td><code class="file">tests/test_help.py</code></td><td>the Q&amp;A guide, the Data menu's sub-menu, that every feature with routes has a section</td></tr>
+    <tr><td><code class="file">tests/test_home.py</code></td><td>the home page: kit, roles, features on, the tools each person sees</td></tr>
+    <tr><td><code class="file">tests/test_jumpstart.py</code></td><td>this guide, and that it is true</td></tr>
+    <tr><td><code class="file">tests/test_kit_admin.py</code></td><td>the feature-management API, setup guides that never leak secrets, role labels per kit</td></tr>
+    <tr><td><code class="file">tests/test_kit_switch.py</code></td><td>switching kits at runtime, precedence, degraded mode, that accounts are never touched</td></tr>
+    <tr><td><code class="file">tests/test_logo.py</code></td><td>the logo files, the favicon, the banner for each theme</td></tr>
+    <tr><td><code class="file">tests/test_organization.py</code></td><td>school became organization: new names, old names still accepted, stored columns unchanged</td></tr>
+    <tr><td><code class="file">tests/test_permissions.py</code></td><td>the permission file, the check for every request and every caller, JWT callers, failing closed</td></tr>
+    <tr><td><code class="file">tests/test_permissions_admin.py</code></td><td>the Permissions page and API: changing, resetting, pinned, the audit log</td></tr>
+    <tr><td><code class="file">tests/test_roles.py</code></td><td>roles and tiers: what each tier can do, the safeguards, assigning roles</td></tr>
+    <tr><td><code class="file">tests/test_theme.py</code></td><td>light and dark mode: the switch, the early script, the contrast of every colour pair</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Writing and trusting tests") }}
+{% call section("Writing a test") %}
+{% call code() %}from conftest import ADMIN, MEMBER, login
+
+def test_a_member_cannot_read_the_roles_api(app):
+    assert login(app, MEMBER).get('/api/roles').status_code == 403
+
+def test_the_admin_can(app):
+    assert login(app, ADMIN).get('/api/roles').status_code == 200{% endcall %}
+<p>Use <code>@pytest.mark.parametrize</code> to try every caller or every input, <code>monkeypatch</code> to change a setting or make something fail, and <code>app.test_request_context(...)</code> to call a function that needs a request without running a route. Test the refusals as carefully as the successes:
+most of the interesting behaviour in this backend is a <i>no</i>.</p>
+{% endcall %}
+
+{% call section("Verifying that a test detects defects") %}
+<p>A habit rather than a tool: after writing a test, <b>break the code on purpose</b> (flip a comparison, skip a check, make a lookup fail open), run the test, and see it fail, then put the code back. A test that stays green when the code is wrong proves nothing. Several of the
+suites here were written this way, for example the tier tests fail if the tier is ignored, a decorator goes back to comparing names, or the permission check ignores the tier.</p>
+{% endcall %}
+
+{% call section("Accuracy of this guide") %}
+<p><code class="file">tests/test_jumpstart.py</code> checks that:</p>
+<ul>
+    <li>every chapter in the contents has a template, renders for anyone, and every link between chapters lands on a real one</li>
+    <li>every file named in a chapter exists in the repository</li>
+    <li>every request marked as a route (<code>GET /api/kit</code> and the like) is one the app really serves, with that method</li>
+    <li>every command marked as a command points at a script or module that exists</li>
+    <li>the settings chapter lists exactly the settings the code reads, the example file declares and the entrypoint uses, in both directions</li>
+    <li>every error message the permissions-file chapter quotes is in the code</li>
+    <li>every test file in <code>tests/</code> is described in this chapter, and every feature is in the live tables</li>
+</ul>
+<p>The tables with numbers (requests per feature, per level, per path) are not written by hand at all: they are computed from the running app each time the page is shown.</p>
+{% endcall %}
+
+{{ files('tests/conftest.py', 'tests/test_jumpstart.py', 'tests/test_roles.py') }}
+{% endblock %}

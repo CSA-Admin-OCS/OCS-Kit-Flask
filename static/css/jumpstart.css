@@ -1,0 +1,39 @@
+/* OCS JumpStart: the guide's layout. Colours come from theme.css, so it follows light and dark mode. */
+.js-wrap { color: var(--text); }
+.js-side { position: sticky; top: 1rem; align-self: flex-start; max-height: calc(100vh - 2rem); overflow-y: auto; font-size: .93rem; }
+@media (max-width: 991px) { .js-side { position: static; max-height: none; } }
+.js-brand { display: block; font-weight: 700; font-size: 1.2rem; margin-bottom: .5rem; text-decoration: none; }
+.js-group { margin: 1rem 0 .3rem; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.js-side ul { margin: 0; }
+.js-side li a { display: block; padding: .22rem .5rem; border-radius: .3rem; text-decoration: none; color: var(--text); }
+.js-side li a:hover { background: var(--surface-2); }
+.js-side li a.active { background: var(--surface-2); font-weight: 600; box-shadow: inset 3px 0 0 var(--link); }
+.js-num { display: inline-block; min-width: 1.5rem; text-align: center; font-size: .75rem; color: var(--muted); }
+.js-num-big { font-size: 1rem; background: var(--surface-2); border-radius: .15rem; padding: .1rem .5rem; vertical-align: middle; color: var(--text); }
+.js-crumbs { color: var(--muted); font-size: .85rem; margin-bottom: .2rem; }
+.js-main { min-width: 0; }                       /* lets a wide table scroll inside its card instead of widening the page */
+.js-body { overflow-x: auto; }
+.js-body code { overflow-wrap: anywhere; }
+.js-main h1, .js-brand, .js-topic, .js-card .js-card-title { font-family: Georgia, 'Times New Roman', serif; }
+.js-main h1 { font-size: 1.9rem; font-weight: 600; border-bottom: 2px solid var(--text); padding-bottom: .4rem; }
+.js-lead { font-size: 1.05rem; color: var(--muted); font-style: italic; }
+.js-short { border-left: 4px solid var(--link); background: var(--surface); border-radius: .15rem; padding: .8rem 1rem; margin: 1rem 0 1.5rem; border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.js-topic { font-size: 1.2rem; font-weight: 600; margin: 2rem 0 .6rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.js-section { margin-bottom: 1.6rem; }
+.js-section h3 { font-family: Georgia, 'Times New Roman', serif; font-size: 1.1rem; font-weight: 600; margin: 1.4rem 0 .5rem; }
+.js-short strong:first-child { text-transform: uppercase; letter-spacing: .06em; font-size: .8rem; }
+.js-body > :last-child { margin-bottom: .5rem; }
+.js-body table, .js-main > table, .js-table { width: 100%; font-size: .9rem; margin: .4rem 0 1rem; }
+.js-body th, .js-body td, .js-main > table th, .js-main > table td { padding: .3rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
+.js-body th, .js-main > table th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+pre.js-code { background: #11161d; color: #e6edf3; border-radius: .4rem; padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; margin: .6rem 0 1rem; }
+pre.js-code code { color: inherit; }
+.js-files { color: var(--muted); font-size: .88rem; margin-top: 1.8rem; }
+.js-pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.js-card { display: block; height: 100%; padding: .9rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: .15rem; text-decoration: none; color: var(--text); }
+.js-card:hover { border-color: var(--link); }
+.js-card .js-card-title { font-weight: 600; display: block; }
+.js-card .js-card-text { color: var(--muted); font-size: .9rem; }
+.js-badge-on { color: #146c43; font-weight: 600; }
+[data-theme="dark"] .js-badge-on { color: #5ee0a0; }
+.js-badge-off { color: var(--muted); }

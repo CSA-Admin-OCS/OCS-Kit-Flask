@@ -1,0 +1,37 @@
+{% extends "layouts/base.html" %}
+{% set project = "OCS JumpStart" %}
+
+{% block style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jumpstart.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="container-xl py-4 js-wrap">
+    <div class="card mb-4">
+        <div class="card-body p-4">
+            <h1 class="display-6"><strong>OCS JumpStart</strong></h1>
+            <p class="lead mb-3">How the OCS-in-a-Kit backend works, from the first run to deployment, in {{ chapters|length }} chapters.</p>
+            <p class="mb-3">Each chapter opens with a <em>summary</em> box and then treats its subject under topic headings. A reader new to the system should begin at the first chapter; a reader with a specific need may go directly to the relevant chapter. Everything stated here is checked against the code by the tests, so it remains accurate as the code changes.</p>
+            <a class="btn btn-primary me-2" href="{{ url_for('jumpstart.chapter', chapter=chapters[0].slug) }}">Begin with the overview</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('help_page') }}">Quick how-to guide (Q&amp;A)</a>
+        </div>
+    </div>
+
+    {% for group in groups %}
+    <h2 class="js-topic">{{ group }}</h2>
+    <div class="row g-3 mb-3">
+        {% for c in chapters if c.group == group %}
+        <div class="col-md-6 col-xl-4">
+            <a class="js-card" href="{{ url_for('jumpstart.chapter', chapter=c.slug) }}">
+                <span class="js-card-title"><span class="js-num">{{ c.number }}</span> {{ c.title }}</span>
+                <span class="js-card-text">{{ c.summary }}</span>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block background %}
+{% endblock %}

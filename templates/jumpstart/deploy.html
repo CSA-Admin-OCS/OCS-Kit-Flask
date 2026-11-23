@@ -1,0 +1,73 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Production is three containers (the backend, the socket service, the code runner) behind nginx, with MySQL. Set <code class="env">IS_PRODUCTION</code>=true and the backend refuses to start without its secrets.
+Because several worker processes run, anything a worker keeps only in memory is not shared, which is why admin changes live in the database.
+{% endcall %}
+
+{{ topic("The containers") }}
+{% call section("Services started by Docker Compose") %}
+<table>
+    <tr><th>Service</th><th>Image built from</th><th>Port</th><th>Notes</th></tr>
+    <tr><td><code>web</code></td><td><code class="file">Dockerfile</code></td><td>8587</td><td>gunicorn with 5 workers and 2 threads each, a 30 second timeout. Reads <code class="file">.env</code>; <code>./instance</code> on the host is mounted over its <code>instance/</code>. Restarts unless stopped.</td></tr>
+    <tr><td><code>socketio</code></td><td><code class="file">socket/</code></td><td>8500</td><td>Multiplayer over Socket.IO. Reads <code class="file">.env</code> for <code class="env">CORS_ORIGINS</code>.</td></tr>
+    <tr><td><code>code_runner</code></td><td><code class="file">runner/</code></td><td>8591, not published</td><td>Runs submitted Python and JavaScript. Reachable only from the other containers.</td></tr>
+</table>
+<p>The compose file also passes <code class="env">KIT</code> and <code class="env">FEATURES</code> through from <code class="file">.env</code> or the shell, so <code>KIT=education docker compose up -d</code> works.</p>
+{% endcall %}
+
+{% call section("The backend image: startup and hardening") %}
+<p><code class="file">entrypoint.sh</code> runs first. It makes sure there is a <code class="env">SECRET_KEY</code> (production refuses to start without one; development generates a random one per container start, so logins reset), creates the
+<code>instance/</code> folders, copies the default profile picture back if a fresh mount hid it, and initializes the database if there is none (or if <code class="env">DB_INIT</code>=true). Then it hands over to gunicorn.</p>
+<p>The image is <code>python:3.12-slim</code> with no compiler, git or Node. It runs as a <b>non-root user (uid 1000)</b>; the code is owned by root and read-only, and only <code>instance/</code> is writable. So a bind-mounted <code>./instance</code> must be writable by uid 1000.
+Its health check fetches <code>/login</code> every 30 seconds, after 90 seconds of grace.</p>
+{% endcall %}
+
+{% call section("Isolation of submitted code") %}
+<p>In production the backend never runs submitted code itself: it posts it to the runner (<code class="env">CODE_RUNNER</code>=remote, which the image sets, and production mode forces). The runner is a separate Alpine container with a non-root user, with all Linux capabilities dropped,
+512 MB of memory, one CPU and at most 128 processes. Each run writes the code to a temporary file, runs it with a 5 second limit and a stripped environment (only <code>HOME</code> and <code>PATH</code>) in <code>/tmp</code>, and deletes the file.</p>
+<p><b>Not covered:</b> the compose file does not cut the runner off from the network, so submitted code can make outbound connections. If that matters, add a network policy or <code>network_mode</code> restrictions. And the code routes need a sign-in, so who may run code is a permissions question, not only a sandbox one.</p>
+{% endcall %}
+
+{{ topic("In front") }}
+{% call section("nginx and HTTPS") %}
+<p><code class="file">deploy/nginx.conf.template</code> proxies <code>flask.&lt;your domain&gt;</code> to the backend and sends <code>/socket.io/</code> traffic to the socket service. Fill it in and let certbot add HTTPS:</p>
+{% call code() %}export SITE_DOMAIN=example.org FLASK_PORT=8587 SOCKET_PORT=8500
+envsubst '${SITE_DOMAIN} ${FLASK_PORT} ${SOCKET_PORT}' < deploy/nginx.conf.template > /etc/nginx/sites-available/flask
+sudo ln -s /etc/nginx/sites-available/flask /etc/nginx/sites-enabled/flask
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d flask.$SITE_DOMAIN{% endcall %}
+<p>Name the variables explicitly in <code>envsubst</code> so nginx's own <code>$variables</code> are left alone. <b>Do not add CORS headers in nginx</b>: the backend sends them, and two copies make browsers reject the answer.
+<code class="file">deploy/socket-nginx.conf.template</code> serves the socket service on its own hostname instead, if that is preferred.</p>
+{% endcall %}
+
+{{ topic("Before going live") }}
+{% call section("Production settings") %}
+<ol>
+    <li><code class="env">IS_PRODUCTION</code>=true. The backend then refuses to start without <code class="env">SECRET_KEY</code>, <code class="env">ADMIN_PASSWORD</code> and <code class="env">DEFAULT_PASSWORD</code>, and sends the token cookie Secure, HttpOnly and cross-site.</li>
+    <li>A long random <code>SECRET_KEY</code> (<code>python -c "import secrets; print(secrets.token_hex(32))"</code>), the same for every worker.</li>
+    <li><code class="env">CORS_ORIGINS</code> to the website's origin or origins, or add them on the CORS page afterwards. <code class="env">COOKIE_DOMAIN</code> if the website and backend are on different subdomains of one domain.</li>
+    <li>Optionally <code class="env">ALLOWED_EMAIL_DOMAINS</code> to limit sign-ups.</li>
+    <li>nginx with HTTPS, as above, and rate limiting on the sign-in routes, because the backend has none.</li>
+    <li>MySQL: <code class="env">DB_ENDPOINT</code>, <code class="env">DB_USERNAME</code>, <code class="env">DB_PASSWORD</code>, and <code class="env">DB_INIT</code>=true for the <b>first boot only</b>, then remove it, or the next restart destroys the database.</li>
+    <li>Back up <code>./instance</code> and the MySQL database; the API export does not carry the admin settings (see {{ ref('data') }}).</li>
+    <li>Run through {{ ref('permissions') }}: retire the <i>unreviewed</i> requests that do not belong open.</li>
+</ol>
+{% endcall %}
+
+{{ topic("Several workers") }}
+{% call section("Running several worker processes") %}
+<p>Each gunicorn worker is its own process with its own memory and its own database connections. That has consequences, all of them deliberate or documented:</p>
+<ul>
+    <li><b>Admin changes are read from the database on each request</b> (features, permissions, CORS, roles), so every worker agrees at once. See {{ ref('big-picture') }}.</li>
+    <li><b>Settings from the environment are read once per process</b>: change <code>.env</code> and restart. The same goes for which features the environment selects.</li>
+    <li><b>Memory-only state is per worker</b>: the spent password-reset tokens (a token is refused only by the worker that accepted it), and the AI characters' conversations (a conversation continues only if the next call lands on the same worker).</li>
+    <li><b>SQLite is not suited</b>: it allows one writer at a time. Use MySQL.</li>
+    <li>The <b>socket service is a single process</b>, so its players and scores are one shared list, lost on restart.</li>
+</ul>
+{% endcall %}
+
+{{ files('Dockerfile', 'docker-compose.yml', 'entrypoint.sh', 'deploy/nginx.conf.template', 'deploy/socket-nginx.conf.template', 'runner/runner.py', 'runner/Dockerfile') }}
+{% endblock %}

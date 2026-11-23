@@ -129,6 +129,7 @@
           "api.permissions_admin:permissions_admin",
           "api.cors_admin:cors_admin",
           "api.roles_admin:roles_admin",
+          "api.jumpstart:jumpstart",
           "api.user:user_api",
           "api.section:section_api",
           "api.pfp:pfp_api",

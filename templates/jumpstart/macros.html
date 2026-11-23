@@ -1,0 +1,36 @@
+{# The pieces every JumpStart chapter is made of. #}
+
+{# A link to another chapter: {{ ref('permissions') }} or {{ ref('permissions', 'the permission check') }} #}
+{% macro ref(slug, text=None) -%}
+<a href="{{ url_for('jumpstart.chapter', chapter=slug) }}">{{ text or chapters_by_slug[slug].title }}</a>
+{%- endmacro %}
+
+{# The box at the top of a chapter: what to remember if you read nothing else. #}
+{% macro short() %}
+<div class="js-short"><strong>Summary.</strong> {{ caller() }}</div>
+{% endmacro %}
+
+{# One titled section of a chapter: a heading and its text, always visible. #}
+{% macro section(title) %}
+<section class="js-section">
+    <h3>{{ title }}</h3>
+    <div class="js-body">{{ caller() }}</div>
+</section>
+{% endmacro %}
+
+{# A group heading inside a chapter; its sections follow. #}
+{% macro topic(title) %}
+<h2 class="js-topic">{{ title }}</h2>
+{% endmacro %}
+
+{# A block of code or output. #}
+{% macro code() %}
+<pre class="js-code"><code>{{ caller() }}</code></pre>
+{% endmacro %}
+
+{# The files to read next. Each name is checked against the repository by a test. #}
+{% macro files() %}
+<p class="js-files"><strong>Source files:</strong>
+    {% for name in varargs %}<code class="file">{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+</p>
+{% endmacro %}

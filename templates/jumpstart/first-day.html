@@ -1,0 +1,80 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Copy the settings file, build the database, start the server, sign in as the admin, and try three changes that are safe to undo. Then run the tests. About fifteen minutes.
+{% endcall %}
+
+{{ topic("Run it") }}
+{% call section("Running locally") %}
+{% call code() %}python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env              # optional while developing: empty values use defaults
+python scripts/db_init.py         # creates the tables and one account per role
+python main.py                    # http://localhost:8587{% endcall %}
+<p>Python 3.10 or newer is needed. In development an unset password is <code>123Qwerty!</code> and an unset <code class="env">SECRET_KEY</code> becomes a random one, so every account is signed out
+at each restart; set a fixed one in <code class="file">.env</code> to stay signed in. <code class="cmd">python scripts/db_init.py</code> drops every table first and asks before doing so; on a
+folder with no database it has nothing to drop.</p>
+<p><b>Restart after changing Python code.</b> The development server does not reload itself, so a page can show new template changes with old route code until it is restarted.</p>
+{% endcall %}
+
+{% call section("Running with Docker") %}
+{% call code() %}cp .env.example .env     # set ORG_NAME, SECRET_KEY, ADMIN_PASSWORD and DEFAULT_PASSWORD
+docker compose up -d --build{% endcall %}
+<p>The first boot creates the database by itself when there is none. The compose file also starts the socket service (port 8500) and the code runner. Data lives in
+<code class="file">instance/</code> on the host, so back that folder up. See {{ ref('deploy') }}.</p>
+{% endcall %}
+
+{{ topic("Sign in and look around") }}
+{% call section("Seeded accounts") %}
+<p>One account is created per role. The usernames depend on the kit; <code class="env">ADMIN_UID</code>, <code class="env">TEACHER_UID</code> and <code class="env">USER_UID</code>
+(and the matching passwords) override them. In development every password is <code>123Qwerty!</code> unless another is set.</p>
+<table>
+    <tr><th>Kit</th><th>Admin</th><th>Staff</th><th>Member</th></tr>
+    <tr><td>no kit set (everything on)</td>{% for rid in ['admin', 'staff', 'member'] %}<td>{{ facts.default_kit[rid][0] }} (<code>{{ facts.default_kit[rid][1] }}</code>)</td>{% endfor %}</tr>
+    {% for kit in facts.kits %}
+    <tr><td>{{ kit.id }}</td>{% for rid in ['admin', 'staff', 'member'] %}<td>{{ kit.accounts[rid][0] }} (<code>{{ kit.accounts[rid][1] }}</code>)</td>{% endfor %}</tr>
+    {% endfor %}
+</table>
+<p>Accounts are created only when the database is created, so changing a name or password in <code class="file">.env</code> later needs <code class="cmd">python scripts/db_init.py</code> again, which wipes the database.</p>
+{% endcall %}
+
+{% call section("Initial inspection as an administrator") %}
+<p>Sign in at <a href="{{ url_for('login') }}">/login</a>, then open the <b>Data</b> menu:</p>
+<ul>
+    <li><b>User Management</b>: every account; the Edit menu goes to the Roles page or Sections for that account.</li>
+    <li><b>Web Security</b>: <a href="{{ url_for('permissions_admin.page') }}">Permissions</a> (who may make each request), <a href="{{ url_for('cors_admin.page') }}">CORS</a> (which websites may call the backend) and <a href="{{ url_for('roles_admin.page') }}">Roles</a> (the tiers L1 to L4).</li>
+    <li>The home page lists what is on, and the <a href="{{ url_for('help_page') }}">Q&amp;A guide</a> answers how to do each thing.</li>
+</ul>
+{% endcall %}
+
+{{ topic("Three safe changes") }}
+{% call section("Safe changes and how to revert them") %}
+<ol>
+    <li><b>Tighten a request.</b> On the Permissions page, set <code>GET /api/study</code> (an unreviewed request, open to anyone) to the member level and Save. In another window, call it without signing in: it now answers 401. Press <b>Reset</b> and it is open again.
+        This is the permission check at work: see {{ ref('permissions') }}.</li>
+    <li><b>Add a role.</b> On the Roles page add <code>Coach</code> at L2, then give it to an account with <i>Give an account a role</i>. That account can now open the user table, because L2 reaches the staff level.
+        Change the role to L3 and it cannot. See {{ ref('roles') }}.</li>
+    <li><b>Allow a website.</b> On the CORS page add <code>https://pages.example.org</code> and Save. A request carrying that <code>Origin</code> header now gets the CORS headers back. Reset and it is gone. See {{ ref('cors') }}.</li>
+</ol>
+<p>Each change is logged on its page under <i>Recent changes</i>, with who made it.</p>
+{% endcall %}
+
+{{ topic("Run the tests") }}
+{% call section("Running the tests") %}
+{% call code() %}pip install pytest
+python -m pytest tests{% endcall %}
+<p><code>pytest</code> is not in <code class="file">requirements.txt</code>, because the running app does not need it. The tests use a throwaway database and a fixed settings set, never the
+<code class="file">.env</code> or <code class="file">instance/</code>. One test (<code>test_catalog_matches_code</code>) imports the grading module, which needs <code>pandas</code> and <code>scikit-learn</code>. Both are in
+<code class="file">requirements.txt</code>, so <code class="cmd">pip install -r requirements.txt</code> installs them; in an environment set up before they were added, that single test fails and everything else passes. More in {{ ref('testing') }}.</p>
+{% endcall %}
+
+{% call section("A first code change") %}
+<p>The smallest real change is a new route. {{ ref('extend') }} walks through it end to end: the function, the entry in <code class="file">permissions.json</code>, the Q&amp;A section and the test, and what each
+check reports any that is omitted.</p>
+{% endcall %}
+
+{{ files('scripts/db_init.py', '.env.example', 'tests/conftest.py') }}
+{% endblock %}

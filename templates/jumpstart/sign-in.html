@@ -1,0 +1,89 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+There are two ways to be signed in: a <b>session</b> (the <code>/login</code> form, used by the admin pages) and a <b>token</b> (<code class="route">POST /api/authenticate</code>, used by the website and scripts).
+The API accepts either; the admin pages accept only the session. Changing a password signs the account out everywhere. There is <b>no rate limiting</b> on sign-in, so put that in nginx.
+{% endcall %}
+
+{{ topic("Becoming a known caller") }}
+{% call section("Methods of signing in") %}
+<table>
+    <tr><th></th><th>Session</th><th>Token</th></tr>
+    <tr><td>How</td><td>the form at <code>/login</code> (<code class="route">POST /login</code>)</td><td>JSON <code>{"uid", "password"}</code> to <code class="route">POST /api/authenticate</code></td></tr>
+    <tr><td>Cookie</td><td><code>sess_python_flask</code> (<code class="env">SESSION_COOKIE_NAME</code>)</td><td><code>jwt_python_flask</code> (<code class="env">JWT_TOKEN_NAME</code>)</td></tr>
+    <tr><td>What it holds</td><td>the account's id and its token version, in Flask's signed session cookie</td><td>a signed JWT: <code>_uid</code>, <code>token_version</code>, <code>exp</code></td></tr>
+    <tr><td>Lasts</td><td>until the browser forgets it, or the password changes</td><td><code class="env">JWT_TOKEN_MAX_AGE</code> seconds (a week by default), or until the password changes</td></tr>
+    <tr><td>Accepted by</td><td>the admin pages and the API</td><td>the API only</td></tr>
+</table>
+<p>Both are signed with <code class="env">SECRET_KEY</code>, which every worker must share: a token signed by one worker has to be accepted by the others. In development an unset key becomes a random one at startup,
+so a restart signs everyone out; in production the backend refuses to start without one.</p>
+{% endcall %}
+
+{% call section("Identifying the caller") %}
+<p><code>identify()</code> in <code class="file">api/authorize.py</code> is the one place. It tries, in order: the session, then the token cookie, then an <code>Authorization</code> header (either <code>Bearer &lt;token&gt;</code> or the bare token).
+For a token it checks that the account still exists and that the token's version matches the account's current one (a session gets the same check when Flask-Login loads it). It answers 401 with a message for a missing, invalid, expired or outdated token, and
+500 if decoding fails some other way. Both the permission check and the <code>@token_required</code> decorator call it, so they can never disagree about who the caller is. A caller identified by the session is also available
+as <code>flask_login.current_user</code>; a token caller only as <code>g.current_user</code>.</p>
+{% endcall %}
+
+{% call section("Cookie settings") %}
+<p>The token cookie is set by <code class="route">POST /api/authenticate</code> and differs by mode:</p>
+<table>
+    <tr><th></th><th>Production (<code class="env">IS_PRODUCTION</code>=true)</th><th>Development</th></tr>
+    <tr><td>Secure</td><td>yes (HTTPS only)</td><td>no</td></tr>
+    <tr><td>HttpOnly</td><td>yes (page scripts cannot read it)</td><td>no</td></tr>
+    <tr><td>SameSite</td><td>None (sent on cross-site requests)</td><td>Lax</td></tr>
+    <tr><td>Domain</td><td><code class="env">COOKIE_DOMAIN</code> if set, else this host only</td><td>this host only</td></tr>
+</table>
+<p>The website and the backend are usually on different sites, and the browser only sends the cookie to the backend if it is <code>SameSite=None</code>, which browsers allow only together with <code>Secure</code>. If they share a parent domain,
+set <code>COOKIE_DOMAIN</code> to it (for example <code>.example.org</code>). The <b>session</b> cookie uses Flask's own defaults in both modes; only the token cookie gets the production settings above.</p>
+{% endcall %}
+
+{{ topic("Passwords") }}
+{% call section("Password storage and rules") %}
+<p>Only a hash is stored: <code>pbkdf2:sha256</code> with a 10-character salt, from Werkzeug. A new password must have <b>at least 8 characters, an uppercase letter, a lowercase letter, a number and one of
+<code>` ~ ! @ # $ % ^ &amp; * ( )</code></b>; anything weaker is refused with a 400 and that sentence. The same rule is used by the Spring backend and the website. An already-hashed value is accepted as it is, which is how a backup
+restore and the bulk import keep passwords working.</p>
+{% endcall %}
+
+{% call section("Password change and sessions") %}
+<p>Each account has a <code>token_version</code> number. It is put inside every session and token when they are created, and checked every time they are used. Setting a <i>different</i> password adds one to it, so every
+older session and token stops matching and is refused. Setting the same hash again (a restore, an idempotent import) changes nothing, so it does not sign anyone out by accident. This is the only way to revoke a token
+before it expires, since tokens are not stored on the server.</p>
+{% endcall %}
+
+{{ topic("Getting an account") }}
+{% call section("Sign-up and guest accounts") %}
+<p><code class="route">POST /api/user</code> is open to anyone. It needs a name and a uid of at least two characters, a password that follows the rule, and optionally an email, an organization and a class. The new account gets the
+<b>sign-up role of the current kit</b> (member in every built-in kit). If <code class="env">ALLOWED_EMAIL_DOMAINS</code> is set, an email outside those domains is refused.
+<code class="route">POST /api/user/guest</code> makes a guest account named <code>Guest_&lt;uid&gt;</code> from just a username and a password, with placeholder email, student id and organization.</p>
+{% endcall %}
+
+{% call section("Password reset") %}
+<p>Two ways. An <b>admin</b> uses the Reset Password button in User Management, which sets the account's password to <code class="env">DEFAULT_PASSWORD</code>
+(<code class="route">POST /users/reset_password/&lt;int:user_id&gt;</code>), and the person should change it at once. A person resets their <b>own</b> through the website: the Spring backend issues a short-lived, signed reset
+token, and the website sends it with the new password to <code class="route">POST /api/reset-password</code>. This backend verifies the token's signature (with <code class="env">RESET_TOKEN_SECRET</code>, shared with Spring) and
+expiry itself, without calling Spring, and rejects a token it has already accepted.</p>
+<p><b>A limit to know:</b> "already accepted" is remembered in the memory of the worker that accepted it, so a restart or a different worker forgets it; the token still expires on its own. If <code>RESET_TOKEN_SECRET</code> is unset the endpoint is closed.</p>
+{% endcall %}
+
+{{ topic("Leaving, and what is not covered") }}
+{% call section("Signing out") %}
+<p>On the admin pages <code class="route">GET /logout</code> ends the session. For the API, <code class="route">DELETE /api/authenticate</code> sends back an already-expired token cookie so the browser drops it.
+Neither revokes anything on the server: a token someone copied still works until it expires or the password changes. If an account's token may have leaked, change its password.</p>
+{% endcall %}
+
+{% call section("Limits of protection") %}
+<ul>
+    <li><b>Guessing passwords.</b> There is no rate limit and no lockout. Add one in nginx (<code>limit_req</code>) for the sign-in routes.</li>
+    <li><b>A second factor.</b> There is none.</li>
+    <li><b>Suspending an account.</b> An account is always active; the way to stop one is to delete it (and an account that owns records cannot be deleted until they are reassigned).</li>
+    <li><b>A stolen token.</b> See above: change the password.</li>
+</ul>
+<p>What it does protect: stored passwords are hashed, the token cookie carries the production flags, every request goes through the permission check, and password hashes are never returned by the general API (only the admin-only backup export carries them, so a backup can be restored).</p>
+{% endcall %}
+
+{{ files('api/authorize.py', 'api/user.py', 'model/user.py', 'main.py') }}
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+An account has a <b>role</b>; a role has a <b>tier</b> from L1 (strongest) to L4 (weakest); the tier gives a <b>rank</b>; and rank is what every check compares with a request's level. Everything that decides by role
+asks the tier, in one place, <code>roles.py</code>, so a role an admin adds at L2 really has staff powers.
+{% endcall %}
+
+{{ topic("Roles, tiers and levels") }}
+{% call section("Role, tier, rank and level") %}
+{% call code() %}account --has--> role --has--> tier (L1..L4) --gives--> rank (3..0) --compared with--> the level a request needs (admin 3 .. public 0){% endcall %}
+<table>
+    <tr><th>Tier</th><th>Rank</th><th>Reaches</th><th>Starts as</th></tr>
+    <tr><td>L1</td><td>3</td><td>admin level and below: everything</td><td>the admin role (and it cannot be changed)</td></tr>
+    <tr><td>L2</td><td>2</td><td>staff level and below</td><td>the staff role</td></tr>
+    <tr><td>L3</td><td>1</td><td>member level and below</td><td>the member role</td></tr>
+    <tr><td>L4</td><td>0</td><td>public level only</td><td>no built-in role</td></tr>
+</table>
+<p>The starting tiers come from the order of the three built-in roles (admin, staff, member) in <code class="file">roles.py</code>; the number of tiers is that count plus one, with L4 meaning "signed in, but no more than someone who is not".
+A <b>level</b> belongs to a request; a <b>tier</b> belongs to a role. See {{ ref('permissions') }} for the levels.</p>
+{% endcall %}
+
+{% call section("Role storage") %}
+<p>The account stores the role's <b>name</b>: <code>Admin</code>, <code>Teacher</code> or <code>User</code> for the built-in ones (the <code>flask.roles</code> map in <code class="file">kits/catalog.json</code>), or whatever an admin typed for a role
+they added (2 to 20 characters, because the account's column is 20 wide). What people <i>see</i> is a separate <b>label</b>: the kit calls the staff role Teacher, Manager or Editor, and an admin can overwrite any label.
+Because the stored name never follows the kit, switching kits never rewrites an account. A stored role that is no longer a role (nothing can leave one behind, but an old import might) counts as a member.</p>
+{% endcall %}
+
+{{ topic("How a tier reaches the code") }}
+{% call section("Where the tier is used") %}
+<table>
+    <tr><th>Place</th><th>How it asks</th></tr>
+    <tr><td>the permission check before every request</td><td><code>caller_rank(user)</code> returns <code>roles.rank(role)</code></td></tr>
+    <tr><td>the <code>@token_required(...)</code> / <code>@auth_required(...)</code> decorators</td><td><code>roles.meets(role, names)</code></td></tr>
+    <tr><td>the admin pages' <code>staff_page_required</code> and <code>admin_page_required</code></td><td><code>roles.meets(role, names)</code></td></tr>
+    <tr><td><code>User.is_admin()</code></td><td>tier is L1</td></tr>
+    <tr><td><code>User.is_staff()</code></td><td>tier is L2 or L1</td></tr>
+    <tr><td><code>User.is_teacher()</code></td><td>tier is exactly L2</td></tr>
+</table>
+<p>Before tiers, every one of these compared role <i>names</i>, so a custom role would have passed the permission check and then been refused by a decorator. Asking one function removes that whole class of bug.</p>
+{% endcall %}
+
+{% call section("The meaning of @token_required(roles.staff_roles())") %}
+<p>The decorators are still written with built-in role names, because that is what the code has always said. <code>meets()</code> reads each built-in name as <b>its level</b>: <code>('Teacher', 'Admin')</code> means "staff level or stronger", which
+any role at L2 or L1 satisfies; <code>('Admin',)</code> means admin level, L1 only. A name that is not a built-in role (a custom one) must match exactly. Notice what this means: if an admin moves the Teacher role down to L4,
+the name <code>Teacher</code> in a decorator <b>still stands for the staff level</b>, and a Teacher at L4 no longer satisfies it.</p>
+{% endcall %}
+
+{% call section("Finding a role's tier") %}
+<ol>
+    <li>The admin role is always L1 and needs no database.</li>
+    <li>Otherwise the saved tier from the <code>role_setting</code> table, if an admin saved one (a custom role always has one; a built-in role has one only if changed).</li>
+    <li>Otherwise the starting tier of a built-in role, and L3 for an unknown role.</li>
+    <li>If the saved roles cannot be read: <b>L4</b> for everyone but admin, until they can, with one error logged per request. It fails closed.</li>
+</ol>
+<p>The saved roles are read once per request and cached for it, and the cache is cleared after every write, so a change is visible to the response that makes it.</p>
+{% endcall %}
+
+{{ topic("Changing roles safely") }}
+{% call section("Safeguards against lock-out") %}
+<ul>
+    <li>The <b>admin role is always L1</b> and cannot be deleted. Asking for another tier is a 400.</li>
+    <li>An admin <b>cannot change their own role</b> (<code class="route">PUT /api/user/role</code> answers 400), so there is always another admin to ask, and the one who is signed in cannot demote themselves.</li>
+    <li>A role that accounts <b>still hold cannot be deleted</b> (409 naming how many). Give them another role first.</li>
+    <li>Role names cannot repeat, even in a different case, and cannot reuse a built-in name.</li>
+    <li>Making a role L1 asks for confirmation on the page, because it grants everything the admin role can do.</li>
+    <li>Every change, and every role given to an account, is logged with who did it (<code>role_audit</code>, shown under Recent changes).</li>
+</ul>
+{% endcall %}
+
+{% call section("Adding a role, and what each tier grants") %}
+<p>On the Roles page, or <code class="route">POST /api/roles</code> with <code>{"name": "Coach", "label": "Coach", "tier": 2}</code>; then give it to an account with <code class="route">PUT /api/user/role</code> and
+<code>{"uid": "ada", "role": "Coach"}</code>. Change a role with <code class="route">PUT /api/roles/&lt;string:role_name&gt;</code> and a label and/or tier, remove one with <code class="route">DELETE /api/roles/&lt;string:role_name&gt;</code>
+(which, for a built-in role, resets its tier and label), and list them with <code class="route">GET /api/roles</code>. What a tier means in practice:</p>
+<ul>
+    <li><b>L2 "Coach"</b> opens the user table and sections page, creates classrooms, and reaches every staff-level request. It cannot change features, permissions, CORS or roles.</li>
+    <li><b>L3 "Helper"</b> is a normal signed-in account.</li>
+    <li><b>L4 "Observer"</b> can use only what the public can: it can see the home page and the public examples but is refused <code class="route">GET /api/id</code>, which needs a member.</li>
+</ul>
+{% endcall %}
+
+{% call section("Limits on customizing a role") %}
+<p>Because a tier is a position on <b>one scale</b>, and the permission model is "request needs a level, caller has a rank". A per-role exception list would be a second dimension on top. The design keeps it to one:
+pick the tier that fits, and if a request should be more or less open, change <i>its</i> level on the Permissions page, for everyone. If the need arises for "Coaches may do X but Teachers may not", that is a sign to give them different tiers.</p>
+{% endcall %}
+
+{{ files('roles.py', 'model/role_setting.py', 'api/roles_admin.py', 'api/authorize.py', 'model/user.py') }}
+{% endblock %}

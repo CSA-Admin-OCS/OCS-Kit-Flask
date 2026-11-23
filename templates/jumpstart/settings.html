@@ -1,0 +1,110 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Settings are environment variables, usually in <code class="file">.env</code> (copy <code class="file">.env.example</code>). They are read <b>once, at startup</b>, so changing one needs a restart. An empty value means the default shown here.
+A test compares this chapter with the settings the code actually reads, in both directions.
+{% endcall %}
+
+{{ topic("Identity") }}
+{% call section("Identity and branding") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">ORG_NAME</code></td><td>OCS Kit</td><td>The organization's name: the navbar, page titles and the home page. The old name <code class="env">SCHOOL_NAME</code> is still read when this is empty.</td></tr>
+    <tr><td><code class="env">ORG_LOGO_URL</code></td><td>the flask mark</td><td>The logo in the navbar. The old name <code class="env">SCHOOL_LOGO_URL</code> is still read.</td></tr>
+    <tr><td><code class="env">SITE_DOMAIN</code></td><td>(this host)</td><td>The base domain: the navbar's search box restricts a search to it, and the nginx template uses it.</td></tr>
+    <tr><td><code class="env">FRONTEND_URL</code></td><td>http://localhost:4500</td><td>The website. The navbar brand links to it, and the user table's "Open my profile on the website" uses it.</td></tr>
+    <tr><td><code class="env">SOCIAL_GITHUB_URL</code>, <code class="env">SOCIAL_TWITTER_URL</code>, <code class="env">SOCIAL_YOUTUBE_URL</code></td><td>none</td><td>Optional links shown by the project page layout.</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Which features") }}
+{% call section("Kit and features") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">KIT</code></td><td>(none: everything on)</td><td><code>vanilla</code>, <code>education</code> or <code>business</code>. See {{ ref('kits') }}.</td></tr>
+    <tr><td><code class="env">FEATURES</code></td><td>(none)</td><td>Adjusts or replaces the kit: <code>+id,-id</code>, an explicit list, or <code>*</code>.</td></tr>
+    <tr><td><code class="env">KIT_CANONICAL_CATALOG</code></td><td>../OCS-Kit/kits/catalog.json</td><td>Where the feature checker finds the shared catalog to compare with. Only used by <code class="cmd">python -m features --check</code>, and only in a development checkout.</td></tr>
+</table>
+<p>An admin can override both at runtime; see {{ ref('kits') }}.</p>
+{% endcall %}
+
+{{ topic("Security") }}
+{% call section("Keys, cookies and production mode") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">IS_PRODUCTION</code></td><td>false</td><td>When <code>true</code>: the backend refuses to start without <code>SECRET_KEY</code>, <code>ADMIN_PASSWORD</code> and <code>DEFAULT_PASSWORD</code>; the token cookie is Secure, HttpOnly and cross-site; code runs in the code runner. See {{ ref('deploy') }}.</td></tr>
+    <tr><td><code class="env">SECRET_KEY</code></td><td>random per start (development only)</td><td>Signs sessions and tokens. Every worker must share it. Required in production. Changing it signs everyone out.</td></tr>
+    <tr><td><code class="env">SESSION_COOKIE_NAME</code></td><td>sess_python_flask</td><td>Name of the session cookie.</td></tr>
+    <tr><td><code class="env">JWT_TOKEN_NAME</code></td><td>jwt_python_flask</td><td>Name of the token cookie.</td></tr>
+    <tr><td><code class="env">JWT_TOKEN_MAX_AGE</code></td><td>604800 (a week)</td><td>Seconds a token and its cookie last.</td></tr>
+    <tr><td><code class="env">COOKIE_DOMAIN</code></td><td>(this host only)</td><td>Domain of the token cookie in production, such as <code>.example.org</code>, so the website and the backend can share it.</td></tr>
+    <tr><td><code class="env">CORS_ORIGINS</code></td><td>localhost:4500 and 4000, and 127.0.0.1</td><td>The starting list of allowed websites; an admin can replace it on the CORS page. Also read by the socket service. See {{ ref('cors') }}.</td></tr>
+    <tr><td><code class="env">ALLOWED_EMAIL_DOMAINS</code></td><td>(any)</td><td>Comma-separated domains; sign-up is refused for any other email.</td></tr>
+    <tr><td><code class="env">RESET_TOKEN_SECRET</code></td><td>(none: reset closed)</td><td>Shared with Spring. Verifies self-service password-reset tokens; unset closes <code class="route">POST /api/reset-password</code>.</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Accounts created with the database") }}
+{% call section("Seeded accounts") %}
+<p>Created only when the database is created (<code class="cmd">python scripts/db_init.py</code>). The uids default to the kit's; the names default to "&lt;role label&gt; Name". Every password must follow the password rule.</p>
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">DEFAULT_PASSWORD</code></td><td>123Qwerty! (development only)</td><td>The password of seeded accounts that have no password of their own, <b>and</b> what an admin's "reset password" sets. Required in production.</td></tr>
+    <tr><td><code class="env">DEFAULT_PFP</code></td><td>default.png</td><td>The default profile picture file.</td></tr>
+    <tr><td><code class="env">ADMIN_USER</code>, <code class="env">ADMIN_UID</code>, <code class="env">ADMIN_PASSWORD</code>, <code class="env">ADMIN_PFP</code></td><td>kit's, DEFAULT_PASSWORD</td><td>The admin account. The migration scripts sign in with this uid and password.</td></tr>
+    <tr><td><code class="env">TEACHER_USER</code>, <code class="env">TEACHER_UID</code>, <code class="env">TEACHER_PASSWORD</code>, <code class="env">TEACHER_PFP</code></td><td>kit's, DEFAULT_PASSWORD</td><td>The staff account (whatever the kit calls that role).</td></tr>
+    <tr><td><code class="env">USER_NAME</code>, <code class="env">USER_UID</code>, <code class="env">USER_PASSWORD</code>, <code class="env">USER_PFP</code></td><td>kit's, DEFAULT_PASSWORD</td><td>The member account.</td></tr>
+    <tr><td><code class="env">MY_NAME</code>, <code class="env">MY_UID</code>, <code class="env">MY_PASSWORD</code>, <code class="env">MY_PFP</code>, <code class="env">MY_ROLE</code></td><td>convenience, DEFAULT_PASSWORD, member</td><td>A fourth account for yourself; set the role to any stored role name.</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Where the data is") }}
+{% call section("Database and rebuilds") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">DB_ENDPOINT</code>, <code class="env">DB_USERNAME</code>, <code class="env">DB_PASSWORD</code></td><td>(SQLite)</td><td>All three together switch to MySQL. See {{ ref('data') }}.</td></tr>
+    <tr><td><code class="env">SQLALCHEMY_DATABASE_URI</code></td><td>(none)</td><td>Any database address; overrides the rest. For tests and unusual setups.</td></tr>
+    <tr><td><code class="env">DB_INIT</code></td><td>false</td><td>Docker only: <code>true</code> re-initializes the database at boot, <b>destroying it</b>. Needed once for a first MySQL boot.</td></tr>
+    <tr><td><code class="env">FORCE_YES</code></td><td>false</td><td>Makes <code>db_init.py</code> skip its "lose all data?" question.</td></tr>
+    <tr><td><code class="env">ALLOW_NO_BACKUP</code></td><td>false</td><td>Lets <code>db_init.py</code> drop the database without a rollback point.</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Servers and services") }}
+{% call section("Ports and the code runner") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">FLASK_PORT</code></td><td>8587</td><td>The port <code>python main.py</code> listens on (the Docker image binds 8587).</td></tr>
+    <tr><td><code class="env">RUNNER_PORT</code></td><td>8591</td><td>The code runner's port; the backend calls <code>http://code_runner:&lt;port&gt;</code>.</td></tr>
+    <tr><td><code class="env">CODE_RUNNER</code></td><td>(local)</td><td><code>remote</code> sends submitted code to the runner. Production always does; the Docker image sets it.</td></tr>
+    <tr><td><code class="env">SOCKET_DEBUG</code></td><td>false</td><td>Debug mode of the socket service.</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("Outside services") }}
+{% call section("AI, GitHub and the automator") %}
+<p>An integration whose settings are empty turns itself off; the rest of the backend carries on.</p>
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">GEMINI_API_KEY</code>, <code class="env">GEMINI_SERVER</code></td><td>none, Google's endpoint</td><td>The Gemini chat, grading summaries and AI characters.</td></tr>
+    <tr><td><code class="env">GROQ_API_KEY</code>, <code class="env">GROQ_SERVER</code></td><td>none, Groq's endpoint</td><td>The Groq chat, and a fallback for the AI characters.</td></tr>
+    <tr><td><code class="env">GITHUB_TOKEN</code></td><td>none</td><td>Needed by every GitHub analytics route; without it they say the token is not set.</td></tr>
+    <tr><td><code class="env">GITHUB_TARGET_TYPE</code>, <code class="env">GITHUB_TARGET_NAME</code></td><td>user, none</td><td>The GitHub user or organization the analytics look at.</td></tr>
+    <tr><td><code class="env">FEEDBACK_GITHUB_REPO</code></td><td>none</td><td>An <code>owner/name</code> repository that receives each feedback submission as an issue (needs <code>GITHUB_TOKEN</code>).</td></tr>
+    <tr><td><code class="env">AUTOMATOR_URL</code>, <code class="env">AUTOMATOR_API_KEY</code></td><td>http://localhost:8586, none</td><td>The skill-snapshot automator the snapshot routes call; without a key they answer 500 "not configured".</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("For the scripts") }}
+{% call section("Migration scripts") %}
+<table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td><code class="env">FLASK_BASE_URL</code></td><td>http://localhost:8587</td><td>The server the migrate and restore scripts talk to. Also the server the sample jokes script posts to.</td></tr>
+    <tr><td><code class="env">ALLOW_PARTIAL_EXPORT</code></td><td>false</td><td>Lets a migration continue with an incomplete export. Only for inspecting a broken endpoint.</td></tr>
+</table>
+{% endcall %}
+
+{{ files('.env.example', '__init__.py', 'entrypoint.sh', 'docker-compose.yml') }}
+{% endblock %}

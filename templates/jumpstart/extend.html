@@ -1,0 +1,76 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Adding a route means <b>four things</b>: the function, an entry in <code class="file">permissions.json</code>, a Q&amp;A section if its feature is new to the guide, and a test. The system is built so that forgetting one fails loudly
+and says what to add. Adding a whole feature adds the catalog entry and, if it has settings or tables, a few more places.
+{% endcall %}
+
+{{ topic("A route") }}
+{% call section("Adding a route") %}
+<p>A blueprint is a module in <code class="file">api/</code>. Using Flask-RESTful, as most of this backend does:</p>
+{% call code() %}# api/greeting.py
+from flask import Blueprint, g
+from flask_restful import Api, Resource
+from api.authorize import token_required
+
+greeting_api = Blueprint('greeting_api', __name__, url_prefix='/api')
+api = Api(greeting_api)
+
+class Greeting(Resource):
+    @token_required()                      # identifies the caller and sets g.current_user
+    def get(self):
+        return {'message': f'Hello {g.current_user.name}'}
+
+api.add_resource(Greeting, '/greeting'){% endcall %}
+<p><code>@token_required()</code> with no argument accepts any signed-in account; <code>@token_required(roles.admin_role())</code> asks for the admin level. For a rule about one record (only the caller's own), test it in the function with
+<code>g.current_user.is_admin()</code> and the record's owner.</p>
+{% endcall %}
+
+{% call section("Files affected by a new route") %}
+<table>
+    <tr><th>Added</th><th>In</th><th>If it is omitted</th></tr>
+    <tr><td>the blueprint module</td><td><code class="file">api/</code></td><td>nothing registers it</td></tr>
+    <tr><td>the blueprint's name under a feature's <code>flask.blueprints</code></td><td><code class="file">kits/catalog.json</code></td><td><code class="cmd">python -m features --check</code> fails: "blueprint ... is not mapped to any feature"; the module is never registered</td></tr>
+    <tr><td>the request line, such as <code>"GET /api/greeting"</code>, at its level</td><td><code class="file">permissions.json</code></td><td>the route answers <b>403 "not in permissions.json"</b> to everyone; startup logs a warning; <code class="cmd">python -m permissions --check</code> exits 1; the tests fail</td></tr>
+    <tr><td>a section for the feature, if it has a blueprint of its own</td><td>the Q&amp;A guide, <code class="file">templates/help.html</code></td><td>a test fails: "help.html has no section for feature ..."</td></tr>
+    <tr><td>a test</td><td><code class="file">tests/</code></td><td>nothing fails, which is the problem: nothing is checking it either</td></tr>
+</table>
+<p>The live map in {{ ref('api') }} and the tables in {{ ref('kits') }} pick the new route up by themselves, since they are built from the running app.</p>
+{% endcall %}
+
+{% call section("Choosing a level") %}
+<p>Ask who should be able to make the request, then take the lowest level that fits: <code>public</code> for something anyone may do on purpose (sign-up, a public example), <code>member</code> for any signed-in account, <code>staff</code> for day-to-day work, <code>admin</code> for settings and other
+people's data. If the right level is not yet known, <code>unreviewed</code> keeps it open and visible on the to-do list, but prefer deciding. The format is in {{ ref('permissions-file') }}.</p>
+{% endcall %}
+
+{{ topic("Other additions") }}
+{% call section("Adding a database table") %}
+<p>Write the model in <code class="file">model/</code> and list its module under the feature's <code>flask.models</code> in the catalog, so it is always imported and its table always exists. If the data should survive a migration, add it to the migrated set in
+<code class="file">api/data_export_import_api.py</code> and both transfer scripts. Remember there are no migration files: on a server that holds data, a schema change goes through export, <code>db_init.py</code> and restore (see {{ ref('data') }}).</p>
+{% endcall %}
+
+{% call section("Adding a setting") %}
+<p>Read it from the environment in <code class="file">__init__.py</code> (with a safe default, and failing at startup if production needs it and it is missing), document it in <code class="file">.env.example</code> with a comment, and add it to the table in {{ ref('settings') }}.
+A test compares the settings the code reads with that table in both directions, so an undocumented setting fails the tests, and so does a documented one that nothing reads. If a feature needs it, also list it in the feature's <code>setup.settings</code> in the catalog so the admin payload can report whether it is configured.</p>
+{% endcall %}
+
+{% call section("Adding an admin page") %}
+<p>Write a route with <code>@admin_page_required</code> (or <code>@staff_page_required</code>) that renders a template extending <code>layouts/base.html</code>, with its API next to it using <code>@token_required(...)</code>. Add the page and API to <code class="file">permissions.json</code>; list the
+<b>pinned</b> ones if a wrong click on them could lock people out. Add an <code>admin_links</code> entry to the feature in the catalog, with a <code>"group"</code> such as <code>"Web Security"</code> to put it in a sub-menu. The page then appears in the Data menu and on the home page
+for exactly the people who may open it.</p>
+{% endcall %}
+
+{% call section("Adding a complete feature") %}
+<ol>
+    <li>Add the feature to the <b>canonical</b> catalog first (id, name, category, labels, description and a setup guide), since the catalog is shared with the website and Spring, and add it to the kit presets that should include it.</li>
+    <li>Copy everything except the <code>flask</code> blocks verbatim into this repository's <code class="file">kits/catalog.json</code>.</li>
+    <li>Write the blueprint and models, then fill the feature's <code>flask</code> block: <code>blueprints</code>, <code>uses_blueprints</code> if it needs another feature's, <code>models</code>, <code>seed</code>, <code>startup</code>, <code>admin_links</code>. The keys are explained in {{ ref('catalog-file') }}.</li>
+    <li>Add its requests to <code class="file">permissions.json</code>, a section to the Q&amp;A guide, and tests.</li>
+    <li>Run <code class="cmd">python -m features --check</code>, <code class="cmd">python -m permissions --check</code> and <code class="cmd">python -m pytest tests</code>.</li>
+</ol>
+{% endcall %}
+
+{{ files('api/authorize.py', 'api/study.py', 'kits/catalog.json', 'permissions.json', 'templates/help.html') }}
+{% endblock %}

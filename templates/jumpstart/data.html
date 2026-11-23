@@ -1,0 +1,76 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+One database (SQLite while developing, MySQL in production) holds accounts, every feature's data and the settings admins changed on the pages. A few folders under <code class="file">instance/</code> hold uploads and shared files.
+<b>A backup through the API carries the data but not the admin settings</b>, and rebuilding the database wipes both.
+{% endcall %}
+
+{{ topic("Which database") }}
+{% call section("Choice of database") %}
+<ol>
+    <li>If <code class="env">SQLALCHEMY_DATABASE_URI</code> is set, that, whatever it is (meant for tests and unusual setups; the init script cannot back it up, so it asks for <code class="env">ALLOW_NO_BACKUP</code>).</li>
+    <li>Else if <code class="env">DB_ENDPOINT</code>, <code class="env">DB_USERNAME</code> and <code class="env">DB_PASSWORD</code> are <b>all</b> set: MySQL on port 3306, database <code>user_management</code>, through PyMySQL.</li>
+    <li>Else SQLite: the file <code class="file">instance/volumes/user_management.db</code>, with the init script keeping a copy beside it as <code>user_management_bak.db</code>.</li>
+</ol>
+<p>The folder is created at startup if it is missing (SQLite makes the file but not its folder). Sessions are not in the database: they live in signed cookies, and the backend keeps no server-side session store.</p>
+{% endcall %}
+
+{{ topic("What is in it") }}
+{% call section("Tables") %}
+<p>Every feature's tables always exist, whatever the kit, because all models are always imported; only the starting data depends on the kit.</p>
+<table>
+    <tr><th>Area</th><th>Tables</th></tr>
+    <tr><td>People and structure</td><td><code>users</code>, <code>sections</code>, <code>user_sections</code> (who is in which section, and the year), <code>classrooms</code>, <code>classroom_student</code></td></tr>
+    <tr><td>Content and activity</td><td><code>feedbacks</code>, <code>microblogs</code>, <code>topics</code>, <code>posts</code>, <code>personas</code>, <code>user_personas</code>, <code>study</code>, <code>skill_snapshots</code>, <code>leaderboard</code>, <code>elementary_leaderboard_events</code></td></tr>
+    <tr><td>What admins changed on the pages</td><td><code>feature_override</code>, <code>kit_setting</code>, <code>feature_audit</code>; <code>permission_override</code>, <code>permission_audit</code>; <code>cors_setting</code>, <code>cors_audit</code>; <code>role_setting</code>, <code>role_audit</code></td></tr>
+</table>
+<p>The nine admin tables are created at startup if a database from before them lacks them, so an older database keeps working. An <code>*_audit</code> table is the log shown under <i>Recent changes</i>: who changed what, and when.</p>
+{% endcall %}
+
+{% call section("Account data") %}
+<p>The row in <code>users</code> holds the uid, name, email, student id, organization, the role <i>name</i>, the password <i>hash</i> and its token version, the profile-picture file name, class and grade data, and a game profile as JSON. Passwords are never stored in a readable form, and the general API strips the hash from every answer. The organization is stored in the column that was always called <code>_school</code>, so databases from before the rename needed no migration.</p>
+{% endcall %}
+
+{{ topic("Files") }}
+{% call section("Storage outside the database") %}
+<ul>
+    <li><code class="file">instance/uploads/</code>: profile pictures, one folder per uid. At most 5 MB per upload, and only <code>.jpg</code>, <code>.png</code> and <code>.gif</code>. A default picture is kept in <code>instance/uploads/default/</code>.</li>
+    <li><code class="file">instance/data/</code>: shared files a feature keeps, such as the jokes list.</li>
+    <li><code>instance/backups/</code>: created when needed, where the init script puts a MySQL dump before it drops anything.</li>
+</ul>
+<p>In Docker, <code>./instance</code> on the host is mounted over the container's <code>instance/</code>, so <b>that folder is what must be backed up</b>. The entrypoint copies the default picture back in when a fresh mount has hidden it.</p>
+{% endcall %}
+
+{{ topic("Rebuilding and backing up") }}
+{% call section("The db_init.py script") %}
+<ol>
+    <li>If the database already has data tables, it warns that all data will be lost and asks (<code class="env">FORCE_YES</code>=true skips the question).</li>
+    <li>It makes a rollback point: a copy of the SQLite file, or a <code>mysqldump</code> into <code>instance/backups/</code>. If it cannot, it refuses to drop anything unless <code class="env">ALLOW_NO_BACKUP</code>=true.</li>
+    <li>It drops <b>every</b> table, including the nine admin ones, and creates them all again.</li>
+    <li>It seeds the enabled features' starting data, and, because the database is empty, creates one account per role (and a few demo accounts and personas).</li>
+</ol>
+<p>So a rebuild also forgets the kit an admin applied, every permission, CORS and role change, and their logs. The Docker entrypoint runs it by itself only when there is no SQLite file yet, or when <code class="env">DB_INIT</code>=true is set (needed once for a first MySQL boot).</p>
+{% endcall %}
+
+{% call section("Export and backup through the API") %}
+<p>The admin-only routes under <code>/api/export/</code> export and import these data types: sections, users, topics, microblogs, posts, classrooms, feedback, study, personas, user personas, leaderboard, elementary leaderboard and skill snapshots
+(<code class="route">GET /api/export/all</code>, <code class="route">GET /api/export/counts</code>, <code class="route">POST /api/export/import</code> and one pair per type). Users are exported <b>with their password hash</b> so a restore keeps everyone's password; that is why these routes are admin-only.</p>
+<p><b>Not included:</b> the nine admin tables. After restoring into a fresh database, <b>re-apply</b> what admins had set: the kit and feature overrides, permission changes, the CORS list and added roles. If a model was added, add it to the migrated set in
+<code class="file">api/data_export_import_api.py</code> and to both transfer scripts, or its data is silently lost in a migration.</p>
+{% endcall %}
+
+{% call section("Moving data and changing the schema") %}
+<p><code class="cmd">python scripts/db_migrate-prod2sqlite.py</code> pulls everything from a running server (<code class="env">FLASK_BASE_URL</code>) into the local SQLite file through those export routes; <code class="cmd">python scripts/db_restore-sqlite2prod.py</code> pushes it back. Both
+reconcile the row counts and exit non-zero if any table did not transfer completely, so do not carry on past a failure (<code class="env">ALLOW_PARTIAL_EXPORT</code>=true exists only to inspect a broken endpoint).</p>
+<p>There are no migration files: the schema is created from the models. To change it on a server that holds data: deploy the new code, pull the data locally, run <code>db_init.py</code> on the server, restore. Plan for that when a column is added.</p>
+{% endcall %}
+
+{% call section("SQLite and MySQL compared") %}
+<p>For development, no. In production use MySQL: SQLite allows one writer at a time and the Docker image runs several workers; MySQL also enforces foreign keys, which is why deleting a user who still owns records (posts, classrooms) answers 409 instead of leaving
+orphaned rows. Times are stored in UTC.</p>
+{% endcall %}
+
+{{ files('__init__.py', 'model/user.py', 'scripts/db_init.py', 'api/data_export_import_api.py', 'scripts/db_utils.py') }}
+{% endblock %}

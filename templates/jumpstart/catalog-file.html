@@ -1,0 +1,83 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+<code class="file">kits/catalog.json</code> is the single source of truth for what features and kits exist and which Flask code belongs to each. Everything except two parts is <b>copied verbatim from the canonical catalog</b> shared with the website
+and Spring; the two parts that are this backend's own are the file's <code>description</code> and every feature's <code>flask</code> block.
+{% endcall %}
+
+{{ topic("The top level") }}
+{% call section("Top-level keys") %}
+<table>
+    <tr><th>Key</th><th>What it holds</th><th>Shared?</th></tr>
+    <tr><td><code>version</code>, <code>description</code></td><td>the format version, and a note about this copy</td><td>description is Flask's</td></tr>
+    <tr><td><code>feature_management</code></td><td>who may change features (<code>allowed_roles</code>: admin) and why</td><td>yes</td></tr>
+    <tr><td><code>roles</code></td><td>the three canonical roles (<code>admin</code>, <code>staff</code>, <code>member</code>) and what each is for</td><td>yes</td></tr>
+    <tr><td><code>flask</code></td><td><code>roles</code>: the stored name this backend uses for each canonical role (<code>Admin</code>, <code>Teacher</code>, <code>User</code>); <code>default_kit</code>: the name, labels, seed usernames and sign-up role used when no kit is set</td><td>no</td></tr>
+    <tr><td><code>categories</code></td><td>core, general, education, each with a name and description</td><td>yes</td></tr>
+    <tr><td><code>labels</code></td><td>tags such as <code>needs-api-key</code>, each with a sentence</td><td>yes</td></tr>
+    <tr><td><code>features</code></td><td>every feature, below</td><td>yes, except each <code>flask</code> block</td></tr>
+    <tr><td><code>kits</code></td><td>the presets, below</td><td>yes</td></tr>
+</table>
+{% endcall %}
+
+{{ topic("A feature") }}
+{% call section("Contents of a feature") %}
+{% call code() %}"social": {
+  "name": "Social",
+  "category": "general",
+  "labels": ["user-content"],
+  "description": "...",
+  "setup": { "summary": "...", "settings": [ ... ], "steps": [ ... ], "verify": "..." },
+  "flask": { "blueprints": [ ... ], "models": [ ... ], "seed": [ ... ], ... }
+}{% endcall %}
+<p><code>category</code> must be one of the categories and every label one of the labels; <code>python -m features --check</code> says so if not. <code>setup</code> is the guide an admin sees: a summary, the <b>settings</b> the feature needs, the manual steps, and how to verify it works. Each setting is
+<code>{key, service, required, secret, help, get_it, example}</code>: <code>service</code> says which piece reads it (<code>flask</code>, <code>spring</code> or <code>pages</code>), and only the ones for <code>flask</code> are reported by this backend, as configured or not. A <code>secret</code>
+setting's value is never shown, and an <code>example</code> is only shown for a non-secret one.</p>
+{% endcall %}
+
+{% call section("The keys of a feature's flask block") %}
+<table>
+    <tr><th>Key</th><th>Meaning</th></tr>
+    <tr><td><code>blueprints</code></td><td><code>"module:attribute"</code> of the blueprints this feature <b>owns</b>. They answer 404 while the feature is off. A blueprint has exactly one owner.</td></tr>
+    <tr><td><code>uses_blueprints</code></td><td>blueprints owned by another feature that this one also needs (ai-grading uses the Gemini routes); served while either is on.</td></tr>
+    <tr><td><code>inactive_blueprints</code></td><td>owned but never registered (code kept, disabled in <code class="file">main.py</code>).</td></tr>
+    <tr><td><code>models</code></td><td>modules with this feature's tables. <b>Always imported</b>, so the tables always exist.</td></tr>
+    <tr><td><code>seed</code></td><td><code>"module:function"</code> that creates reference data, never accounts. Run by <code>db_init.py</code>, and when an admin turns the feature on while its tables are empty.</td></tr>
+    <tr><td><code>seed_accounts</code></td><td>functions that create accounts with known passwords. Run only by <code>db_init.py</code>, on a database with no users.</td></tr>
+    <tr><td><code>startup</code></td><td>functions run when the app starts and when the feature is turned on.</td></tr>
+    <tr><td><code>admin_links</code></td><td><code>{label, endpoint}</code> entries for the Data menu, with an optional <code>group</code> that puts several into one sub-menu (<code>"Web Security"</code>). An endpoint must be in one of the feature's own blueprints.</td></tr>
+</table>
+<p>Any other key in a <code>flask</code> block is an error. A feature with no Flask code, such as <i>lessons</i>, has empty lists.</p>
+{% endcall %}
+
+{{ topic("A kit") }}
+{% call section("Contents of a kit") %}
+{% call code() %}"education": {
+  "name": "OCS Education",
+  "description": "...",
+  "features": ["core", "lessons", "code-runner", ...],
+  "roles": { "admin":  {"label": "Admin",   "seed_uid": "admin"},
+             "staff":  {"label": "Teacher", "seed_uid": "teacher"},
+             "member": {"label": "Student", "seed_uid": "student"} },
+  "signup_role": "member"
+}{% endcall %}
+<p><code>features</code> is the preset. <code>roles</code> gives the three canonical roles their labels in this kit and the usernames of the accounts created for them. <code>signup_role</code> is the canonical role new sign-ups get. All three roles must be present, and the stored names do not
+change with the kit (they are in <code>flask.roles</code>).</p>
+{% endcall %}
+
+{{ topic("Keeping it valid") }}
+{% call section("Verification with python -m features --check") %}
+<ul>
+    <li>the catalog has a <code>core</code> feature, and every category and label a feature names exists</li>
+    <li>every kit's feature list refers only to real features, and the roles line up with the canonical ones</li>
+    <li>every module a feature names imports, and every blueprint in <code class="file">api/</code> or <code class="file">hacks/</code> is claimed by exactly one feature (so new code cannot skip gating)</li>
+    <li>every admin link points into its own feature's blueprint and every setting names a key and a service</li>
+    <li>this copy has not drifted from the canonical catalog, when that is present next to the repository (it compares everything except the two Flask-only parts)</li>
+</ul>
+<p>The tests run the same check. When it fails it prints the exact problem, one per line.</p>
+{% endcall %}
+
+{{ files('kits/catalog.json', 'features.py', 'roles.py') }}
+{% endblock %}

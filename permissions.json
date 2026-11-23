@@ -20,6 +20,8 @@
     "POST /api/user",
     "POST /api/user/guest",
     "GET /help/",
+    "GET /jumpstart/",
+    "GET /jumpstart/<string:chapter>/",
     "GET /login",
     "POST /login",
     "GET /logout",

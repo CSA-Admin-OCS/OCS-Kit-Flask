@@ -1,0 +1,65 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+A browser lets a website call a different website's API only if that API says the website's <b>origin</b> is allowed. The backend keeps one list of allowed origins: the one an admin saved on the CORS page, else
+<code class="env">CORS_ORIGINS</code>, else the local development sites. It is read on every cross-origin request, so a change applies at once in every worker.
+{% endcall %}
+
+{{ topic("Why it exists") }}
+{% call section("Origins and browser refusals") %}
+<p>An <b>origin</b> is the scheme, host and port of a web page: <code>https://pages.example.org</code>, <code>http://localhost:4500</code>. The site and the backend are normally on different origins. By default a browser stops a page
+from reading the answer to a request to another origin; the other side opts in by sending <code>Access-Control-Allow-Origin</code> naming the page's origin. This is the browser protecting the person using it, and it is
+<b>not</b> a way to keep programs out: <code>curl</code> ignores it, which is why permissions are separate. A failed CORS check shows in the browser console as a "CORS error", with the request often having reached the backend and been answered.</p>
+{% endcall %}
+
+{{ topic("What the backend does") }}
+{% call section("Response headers") %}
+<p>Only when the request has an <code>Origin</code> header (a browser sends it for cross-origin requests) and the origin is allowed:</p>
+<table>
+    <tr><th>Header</th><th>Value</th></tr>
+    <tr><td><code>Access-Control-Allow-Origin</code></td><td>the request's own origin, exactly as sent</td></tr>
+    <tr><td><code>Access-Control-Allow-Credentials</code></td><td><code>true</code>, so the browser may send and accept cookies</td></tr>
+    <tr><td><code>Vary</code></td><td>adds <code>Origin</code>, so a cache never serves one site's answer to another</td></tr>
+    <tr><td>on a preflight only:<br><code>Access-Control-Allow-Methods</code></td><td><code>DELETE, GET, OPTIONS, POST, PUT</code></td></tr>
+    <tr><td>on a preflight only:<br><code>Access-Control-Allow-Headers</code></td><td>whatever headers the browser said it wanted, sorted</td></tr>
+</table>
+<p>A <b>preflight</b> is the <code>OPTIONS</code> request a browser sends first when a call is not "simple" (JSON, or any cookie, header or method beyond the basics). A request from an origin that is not allowed gets no CORS headers at all, and the browser blocks the page.
+The headers go on <i>every</i> answer, including a 401, 403 or 404, so the page can read why it was refused. A request with no <code>Origin</code> header (same-site, or not from a browser) gets none, because it needs none.</p>
+{% endcall %}
+
+{% call section("Origin matching") %}
+<p>Exactly, ignoring case: <code>http://localhost:4500</code> does not match <code>http://localhost:45001</code> or <code>http://localhost:4500/</code> (a trailing slash makes it a different string, which is why the page refuses to save one).
+The one exception is the list in <code class="env">CORS_ORIGINS</code>, which, as it always could, may hold a <b>pattern</b>: an entry with regular-expression characters is matched as a regular expression (case-insensitive, from the start), and <code>*</code> alone means every site.
+Patterns are checked at startup, so a malformed one stops the app instead of silently never matching. A pattern can only come from <code>.env</code>; the CORS page saves exact origins only.</p>
+{% endcall %}
+
+{{ topic("The list") }}
+{% call section("Source and administration of the allowed list") %}
+<ol>
+    <li>The list an admin <b>saved</b> on the CORS page (<code class="route">PUT /api/cors</code>), kept in the <code>cors_setting</code> table.</li>
+    <li>Otherwise <code class="env">CORS_ORIGINS</code>, a comma-separated list in <code class="file">.env</code>.</li>
+    <li>Otherwise the local development sites (<code>localhost</code> and <code>127.0.0.1</code>, ports 4500 and 4000).</li>
+</ol>
+<p><b>Reset</b> (<code class="route">DELETE /api/cors</code>) forgets the saved list so the setting decides again. Saving an empty list is valid and allows no website. Only exact origins are accepted, at most 100, and the page warns about <code>http://</code> origins that are not local, because cookies and passwords would cross that connection unencrypted.
+<code class="route">GET /api/cors</code> shows the list, where it came from, the setting's list and the recent changes. All three requests are admin-only and pinned.</p>
+{% endcall %}
+
+{% call section("Behaviour when the saved list is unreadable") %}
+<p>No cross-origin request is allowed until it can, and the error is logged. That is the safe side: wrongly refusing a website is a visible, fixable outage, while wrongly allowing one is not.</p>
+{% endcall %}
+
+{{ topic("Around it") }}
+{% call section("CORS and cookies") %}
+<p>No. Cookies are a separate rule: the token cookie must be <code>SameSite=None</code> and <code>Secure</code> to be sent from another site, and <code class="env">COOKIE_DOMAIN</code> lets sites under one parent domain share it. See {{ ref('sign-in') }}. If a call fails with a
+CORS error <i>and</i> then a 401, fix CORS first, then the cookie.</p>
+{% endcall %}
+
+{% call section("The socket service and nginx") %}
+<p><b>Not the saved list.</b> The socket service is a separate container that reads <code class="env">CORS_ORIGINS</code> from its environment only, so an origin added on the CORS page does not reach it; put it in <code class="file">.env</code> too.
+And do <b>not</b> add CORS headers in nginx: the backend already sends them, and two <code>Access-Control-Allow-Origin</code> headers make browsers reject the answer. The nginx template says so.</p>
+{% endcall %}
+
+{{ files('cors.py', 'model/cors_setting.py', 'api/cors_admin.py', 'socket/socket_server.py', 'deploy/nginx.conf.template') }}
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+JSON in, JSON out, cookies for sign-in. The same shapes recur: a refusal is <code>{"message", "data", "error"}</code> with 401, 403 or 503; a validation problem is <code>{"message"}</code> with 400; and an unknown or disabled route is an
+<b>HTML</b> 404 page, so read the status code. This backend serves {{ facts.requests_total }} requests; the live map below shows where they are.
+{% endcall %}
+
+{{ topic("Conventions") }}
+{% call section("Calling the API") %}
+<p>Send and expect JSON, with <code>Content-Type: application/json</code> on a body. Sign in once, then send the cookie the answer sets (<code class="route">POST /api/authenticate</code>; <code>curl -c jar</code> saves it, <code>curl -b jar</code> sends it), or
+send the token in an <code>Authorization</code> header. From a browser on another site, the site's origin must be allowed (see {{ ref('cors') }}) and requests must include credentials.</p>
+{% call code() %}curl -c jar -X POST http://localhost:8587/api/authenticate \
+  -H 'Content-Type: application/json' -d '{"uid": "admin", "password": "123Qwerty!"}'
+curl -b jar http://localhost:8587/api/id{% endcall %}
+<p>Some scripts and examples also send <code>X-Origin: client</code>. The backend <b>does not require or check it</b>; it is a habit of the migration scripts.</p>
+{% endcall %}
+
+{% call section("Status codes") %}
+<table>
+    <tr><th>Status</th><th>Meaning</th><th>Said by</th></tr>
+    <tr><td>200, 201</td><td>done; created</td><td>the route</td></tr>
+    <tr><td>400</td><td>the request is wrong: missing or invalid field, weak password, a body that is not a JSON object, a forbidden change</td><td>the route</td></tr>
+    <tr><td>401</td><td>not signed in, or the token is invalid, expired or outdated</td><td>the permission check or <code>@token_required</code></td></tr>
+    <tr><td>403</td><td>signed in but not allowed; or the request is in no list in <code>permissions.json</code></td><td>the permission check, a decorator, or the route</td></tr>
+    <tr><td>404</td><td>no such route, a feature that is off, or no such record</td><td>the feature gate (HTML page), or the route (JSON)</td></tr>
+    <tr><td>409</td><td>a conflict that is not the caller's fault: deleting a user who still owns records, deleting a role accounts still hold</td><td>the route</td></tr>
+    <tr><td>500</td><td>a bug or an unexpected failure</td><td>Flask</td></tr>
+    <tr><td>502, 504</td><td>the code runner could not be reached, or timed out</td><td>the code routes</td></tr>
+    <tr><td>503</td><td>settings an admin saved cannot be read, or cannot be saved</td><td>the permission check, the admin APIs</td></tr>
+</table>
+{% endcall %}
+
+{% call section("Error format") %}
+{% call code() %}401 / 403 / 503   {"message": "Insufficient permissions. This needs the staff level or above.", "data": null, "error": "Forbidden"}
+400             {"message": "Password needs 8+ characters with an uppercase letter, ..."}
+404 (record)    {"message": "User ada not found"}
+404 (route)     an HTML page, "Something Went Wrong, 404 Not Found"
+409             {"message": "User ada still owns records (posts, classrooms, ...) and was not deleted."}{% endcall %}
+<p>The refusals of the permission check and the sign-in decorator share one shape, so a client can handle them in one place. Other errors carry at least a <code>message</code>. Do not parse the 404 body: both "this route does not exist" and "this feature is off" answer the same HTML page on purpose.</p>
+{% endcall %}
+
+{% call section("Pagination") %}
+<p>Where a list can be long, yes: <code>GET /api/user?page=2&amp;per_page=50</code> returns <code>{"users": [...], "pagination": {"page", "per_page", "total", "has_next", "has_prev"}}</code>, with <code>per_page</code> defaulting to 50 and capped at 200. Without <code>page</code> the whole list is returned as an array.
+Most other lists are small and returned whole.</p>
+{% endcall %}
+
+{{ topic("The live map") }}
+{% call section("Requests served per feature") %}
+<table>
+    <tr><th>Feature</th><th>On now</th><th>Requests</th></tr>
+    {% for f in facts.features if f.requests %}
+    <tr><td><code>{{ f.id }}</code> {{ f.name }}</td><td>{% if f.enabled %}<span class="js-badge-on">on</span>{% else %}<span class="js-badge-off">off</span>{% endif %}</td><td>{{ f.requests }}</td></tr>
+    {% endfor %}
+    <tr><th>Total</th><th></th><th>{{ facts.requests_total }}</th></tr>
+</table>
+<p>This is built from the running app, so it includes anything that is added. The same requests, with their levels, are on the Permissions page.</p>
+{% endcall %}
+
+{% call section("Paths") %}
+<table>
+    <tr><th>Path prefix</th><th>Requests</th></tr>
+    {% for prefix, count in facts.prefixes %}<tr><td><code>{{ prefix }}</code></td><td>{{ count }}</td></tr>{% endfor %}
+</table>
+<p>Everything under <code>/api/</code> and <code>/run/</code> is the API. The rest are pages rendered by the backend (<code>/login</code>, <code>/users</code>, <code>/sections</code>, the admin pages, this guide) and the file routes: <code class="route">GET /uploads/&lt;path:filename&gt;</code> serves profile pictures, openly, and
+<code>/static/</code> serves the site's own files.</p>
+{% endcall %}
+
+{% call section("Admin-only API groups") %}
+<ul>
+    <li><code>/api/kit/admin</code>: features and kits (see {{ ref('kits') }})</li>
+    <li><code>/api/permissions</code>: levels (see {{ ref('permissions') }})</li>
+    <li><code>/api/roles</code> and <code class="route">PUT /api/user/role</code>: roles and tiers (see {{ ref('roles') }})</li>
+    <li><code>/api/cors</code>: allowed websites (see {{ ref('cors') }})</li>
+    <li><code>/api/export</code>: backups and imports (see {{ ref('data') }})</li>
+</ul>
+{% endcall %}
+
+{{ files('api/', 'api/authorize.py', 'api/user.py', 'api/kit_api.py') }}
+{% endblock %}

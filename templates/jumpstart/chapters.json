@@ -1,0 +1,23 @@
+{
+  "groups": ["Start here", "How it works", "Build on it", "Reference", "Run it"],
+  "chapters": [
+    {"slug": "big-picture", "group": "Start here", "title": "Overview", "summary": "The parts of the system, the words used for them, and where every piece of state lives."},
+    {"slug": "first-day", "group": "Start here", "title": "Getting started", "summary": "Running the backend, signing in, inspecting it, making three safe changes and running the tests."},
+    {"slug": "request-life", "group": "How it works", "title": "The life of a request", "summary": "What happens, in order, between a browser sending a request and getting an answer."},
+    {"slug": "sign-in", "group": "How it works", "title": "Accounts and authentication", "summary": "Sessions, tokens, cookies, passwords, sign-up and resets: how a caller becomes identified."},
+    {"slug": "permissions", "group": "How it works", "title": "Authorization", "summary": "The permission levels, the file and the page that decide whether a request is allowed, and what happens when they cannot."},
+    {"slug": "roles", "group": "How it works", "title": "Roles and tiers", "summary": "How an account's role becomes a tier from L1 to L4, and how that tier reaches every check in the code."},
+    {"slug": "kits", "group": "How it works", "title": "Kits and features", "summary": "How the backend decides which features are on, how admins change that without a restart, and what a disabled feature does."},
+    {"slug": "cors", "group": "How it works", "title": "Browsers and CORS", "summary": "Why a browser refuses a call, how the allowed websites are decided, and what is sent back."},
+    {"slug": "data", "group": "How it works", "title": "Data and storage", "summary": "The database, every table, the files, what survives a rebuild and what a backup does and does not carry."},
+    {"slug": "extend", "group": "Build on it", "title": "Adding a feature", "summary": "Every place that changes when a feature is added: code, catalog, permissions, documentation and tests."},
+    {"slug": "permissions-file", "group": "Reference", "title": "permissions.json", "summary": "The format of the permission file: every list, every rule, every error."},
+    {"slug": "catalog-file", "group": "Reference", "title": "catalog.json", "summary": "The format of the kit catalog: features, kits, roles and what each key does."},
+    {"slug": "settings", "group": "Reference", "title": "Configuration settings", "summary": "Each environment variable: what it is, its default, and what reads it."},
+    {"slug": "api", "group": "Reference", "title": "The API", "summary": "Conventions every endpoint follows, the shape of errors, and a live map of what each feature serves."},
+    {"slug": "commands", "group": "Reference", "title": "Command-line tools", "summary": "Every command and script: what it does, what it changes, and when to use it."},
+    {"slug": "deploy", "group": "Run it", "title": "Deploying", "summary": "Docker, workers, nginx, the production checklist, and what running several workers changes."},
+    {"slug": "testing", "group": "Run it", "title": "Testing and documentation accuracy", "summary": "How the tests are set up, what they cover, and how this guide is checked against the code."},
+    {"slug": "troubleshooting", "group": "Run it", "title": "Troubleshooting", "summary": "Symptoms, the meaning of each, and the corrective action."}
+  ]
+}

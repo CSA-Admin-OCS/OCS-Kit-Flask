@@ -1,0 +1,96 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+A <b>feature</b> is a switchable part of the product; a <b>kit</b> is a preset list of features. The backend works out which are on from the kit an admin applied, or else the environment, then admin overrides.
+A feature that is off answers <b>404</b> and keeps its data. <code>core</code> is always on. Admins change all of this without a restart.
+{% endcall %}
+
+{{ topic("What exists") }}
+{% call section("Kits and features") %}
+<p><b>Kits.</b> There are three presets, and "no kit set" turns everything on (how the system worked before kits existed).</p>
+<table>
+    <tr><th>Kit</th><th>Name</th><th>Features</th></tr>
+    {% for kit in facts.kits %}
+    <tr><td><code>{{ kit.id }}</code></td><td>{{ kit.name }}</td><td>{% for fid in kit.features %}{{ fid }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+</table>
+<p><b>Features</b>, live from this backend: whether each is on right now, how many requests it serves, and the modules of its own routes.</p>
+<table>
+    <tr><th>Feature</th><th>Category</th><th>On now</th><th>Requests</th><th>Route modules</th></tr>
+    {% for f in facts.features %}
+    <tr><td><code>{{ f.id }}</code> {{ f.name }}</td><td>{{ f.category }}</td>
+        <td>{% if f.enabled %}<span class="js-badge-on">on</span>{% else %}<span class="js-badge-off">off</span>{% endif %}</td>
+        <td>{{ f.requests }}</td><td>{% for m in f.modules %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+</table>
+<p>{{ facts.requests_total }} requests in all. A feature with no route modules is served by another piece of the system, or reuses another feature's routes.</p>
+{% endcall %}
+
+{% call section("Categories and labels") %}
+<p>They are descriptions in the catalog, so a person choosing features can see what they are getting. <b>Categories</b> group features:</p>
+<ul>{% for cid, text in facts.categories.items() %}<li><b>{{ cid }}</b>: {{ text }}</li>{% endfor %}</ul>
+<p><b>Labels</b> are tags that say what to check before turning a feature on:</p>
+<ul>{% for name, text in facts.labels.items() %}<li><code>{{ name }}</code>: {{ text }}</li>{% endfor %}</ul>
+{% endcall %}
+
+{{ topic("Deciding what is on") }}
+{% call section("Deciding which features are on") %}
+<ol>
+    <li><b>A kit an admin applied</b> at runtime wins. It is stored in the database; its preset applies, then admin overrides. <code class="env">KIT</code> and <code class="env">FEATURES</code> are ignored while it is stored.</li>
+    <li>Otherwise <b>the environment</b>: <code>KIT</code> picks a preset (unset means everything), <code>FEATURES</code> adjusts it. This is worked out once per process, at startup. Then admin overrides apply.</li>
+    <li><b>Admin overrides</b> (one feature on or off) always apply last and win over both.</li>
+    <li>If the stored kit and overrides <b>cannot be read</b>, only the always-on features run until they can. It does <i>not</i> fall back to the environment, because that would bring back a feature an admin had switched off.</li>
+</ol>
+<p><code class="route">GET /api/kit</code> reports the result, including <code>kit_source</code> (<code>admin</code>, <code>env</code> or <code>default</code>), whether it is <code>customized</code> from the preset, and whether it is <code>degraded</code>.</p>
+{% endcall %}
+
+{% call section("The FEATURES setting") %}
+<table>
+    <tr><th>Value</th><th>Meaning</th></tr>
+    <tr><td><code>+hallpass,-resume</code></td><td>the kit, plus hallpass, minus resume</td></tr>
+    <tr><td><code>+*</code></td><td>the kit plus every other feature</td></tr>
+    <tr><td><code>ai-chatbot,social</code></td><td>an explicit list that replaces the kit (core is added)</td></tr>
+    <tr><td><code>*</code> or <code>*,-kasm</code></td><td>every feature, or every feature except one</td></tr>
+</table>
+<p>An unknown kit or feature id stops the app at startup with an error that lists the valid ones, so a typo cannot silently turn a feature off.</p>
+{% endcall %}
+
+{{ topic("What a switch does") }}
+{% call section("A disabled feature") %}
+<p>Every request to one of its blueprints answers <b>404</b>, including the wrong-method case that would normally be a 405, so it does not reveal itself. Its admin links vanish from the menus. <b>Nothing is deleted</b>: every feature's tables
+are always created, whatever the kit, because all models are always imported, so turning a feature on again needs no migration and finds its data intact. Blueprints shared by two features (the Gemini routes, used by ai-chatbot and ai-grading) stay on while either is.</p>
+{% endcall %}
+
+{% call section("Turning a feature on") %}
+<p>Its <b>startup</b> functions run (for example the jokes file for <i>examples</i>), and its <b>seed</b> functions run <i>only if the feature's tables are empty</i>, so reference data (the personas for <i>social</i>) is created once and never duplicated by
+turning a feature off and on. Seed functions never create accounts. Functions that create accounts with known passwords are listed separately (<code>seed_accounts</code>), and only <code class="cmd">python scripts/db_init.py</code> runs them, on a database with no users.</p>
+{% endcall %}
+
+{% call section("Changing features and kits at runtime") %}
+<table>
+    <tr><th>Request</th><th>Effect</th></tr>
+    <tr><td><code class="route">GET /api/kit/admin</code></td><td>everything in <code>/api/kit</code>, plus each feature's source (<code>kit</code>, <code>env</code> or <code>admin</code>), its setup guide, whether its required settings are set, and the recent changes</td></tr>
+    <tr><td><code class="route">PUT /api/kit/admin/features</code></td><td><code>{"features": {"social": false}}</code> sets overrides; unknown ids and disabling <code>core</code> are 400</td></tr>
+    <tr><td><code class="route">DELETE /api/kit/admin/features/&lt;feature_id&gt;</code></td><td>clears one override, so the kit decides again</td></tr>
+    <tr><td><code class="route">PUT /api/kit/admin/kit</code></td><td><code>{"kit": "business"}</code> applies a preset and clears all overrides</td></tr>
+    <tr><td><code class="route">DELETE /api/kit/admin/kit</code></td><td>forgets the stored kit and overrides, going back to <code>KIT</code> and <code>FEATURES</code></td></tr>
+</table>
+<p>All are admin-only. A kit switch never touches accounts or data: stored roles, uids and logins stay as they are, and only labels and the role of <i>new</i> sign-ups follow the new kit. Every change is logged in <code>feature_audit</code> with who made it.</p>
+{% endcall %}
+
+{% call section("Degraded mode") %}
+<p>It is what the system does when it cannot read what admins saved (a database failure, as opposed to nothing being saved). <code class="route">GET /api/kit</code> then says <code>degraded: true</code> (the reason is in the admin payload), the home page shows a notice,
+only always-on features answer, and every attempt to change features answers 503. Every request tries to read again, so it recovers by itself the moment the database answers, and the error is logged once per outage rather than once per request.</p>
+{% endcall %}
+
+{{ topic("Checking it") }}
+{% call section("Inspecting the feature setup") %}
+<p><code class="cmd">python -m features --list</code> prints the kits, the categories and every feature with whether it is on. <code class="cmd">python -m features --check</code> validates the catalog against the code and exits non-zero on a problem:
+unknown categories or labels, a blueprint or model that does not import, a blueprint claimed by two features, a blueprint in <code class="file">api/</code> that no feature lists (so new code cannot skip gating), an admin link that points
+into another feature's blueprint, and drift from the canonical catalog when that is present. The format of the file is in {{ ref('catalog-file') }}.</p>
+{% endcall %}
+
+{{ files('features.py', 'kits/catalog.json', 'model/feature_override.py', 'api/kit_api.py') }}
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Every request has a <b>level</b> (public, member, staff or admin). Every caller has a <b>rank</b> that comes from the tier of their role. A request is allowed when the rank reaches the level, and
+<b>a request that is in no list is refused for everyone</b>. The file <code class="file">permissions.json</code> holds the defaults; admins change them on the Permissions page; routes can still ask for more.
+{% endcall %}
+
+{{ topic("The model") }}
+{% call section("Levels and ranks") %}
+<table>
+    <tr><th>Level a request needs</th><th>Rank needed</th><th>Who reaches it</th><th>Requests at this level now (in the file)</th></tr>
+    <tr><td>public</td><td>0</td><td>anyone, signed in or not</td><td>{{ facts.by_level.public }}</td></tr>
+    <tr><td>unreviewed</td><td>0</td><td>anyone (nobody has decided yet)</td><td>{{ facts.by_level.unreviewed }}</td></tr>
+    <tr><td>member</td><td>1</td><td>any role of tier L3, L2 or L1</td><td>{{ facts.by_level.member }}</td></tr>
+    <tr><td>staff</td><td>2</td><td>tier L2 or L1</td><td>{{ facts.by_level.staff }}</td></tr>
+    <tr><td>admin</td><td>3</td><td>tier L1</td><td>{{ facts.by_level.admin }}</td></tr>
+</table>
+<p>An anonymous caller has rank 0. A signed-in caller has rank <code>4 - tier</code>: L1 is 3, L2 is 2, L3 is 1 and L4 is 0, so an L4 account may do no more than someone who is not signed in. The request is allowed when
+<code>rank &gt;= level's rank</code>. These counts are the file's; the Permissions page shows the live ones including admins' changes. See {{ ref('roles') }} for where the tier comes from.</p>
+{% endcall %}
+
+{% call section("Refusal of unlisted requests") %}
+<p>So that a new route can never be open by accident. If a developer adds a route and forgets to say who may use it, the first call answers <b>403</b> with a message naming the exact entry to add. Three things catch it earlier:
+the app logs a warning at startup listing every route missing from the file, <code class="cmd">python -m permissions --check</code> lists them and exits non-zero, and the tests fail. The file also may not list a request that no
+route serves (a stale entry), and may not list the same request twice.</p>
+{% endcall %}
+
+{% call section("The <i>unreviewed</i> list") %}
+<p>When the permission system was added, {{ facts.by_level.unreviewed }} requests were still open to anyone only because they always had been, and the right level for each was a decision rather than a fact. Rather than call
+them public, which would say someone chose that, they are listed as <i>unreviewed</i>: they behave exactly like public but show in yellow on the Permissions page and in <code class="cmd">python -m permissions</code>.
+Retiring one is a one-line move to the level it belongs at, either in the file or from the page.</p>
+{% endcall %}
+
+{{ topic("Changing it") }}
+{% call section("Source of a request's level") %}
+<ol>
+    <li>If the request is <b>pinned</b> in the file, its level is the file's, always. A saved change for it is ignored.</li>
+    <li>Otherwise, if an admin saved a level for it on the Permissions page, that is its level (stored in <code>permission_override</code>, and logged in <code>permission_audit</code>).</li>
+    <li>Otherwise the level in <code class="file">permissions.json</code>.</li>
+    <li>If it is in neither: refused (403). If the saved levels cannot be read: refused (503).</li>
+</ol>
+<p>Choosing on the page the level the file already gives is stored as <i>no change</i>, and Reset deletes the saved level. Pinned requests are the login routes and the admin pages of this feature (Permissions, CORS, Roles), so a wrong click cannot lock everyone out.</p>
+{% endcall %}
+
+{% call section("Limits of making a request more open") %}
+<p>Because the file and the page decide who gets as far as the route, and many routes also check for themselves, through <code>@token_required(...)</code> or an <code>is_admin()</code> test inside. That check is a second layer, kept
+on purpose, and the stricter of the two wins. So the page can always make a request stricter, but can make one more open only where the route has no check of its own. Try setting <code class="route">GET /api/id</code> to public: it still
+answers 401 to an anonymous caller, because the route insists on a login. The honest fix is in the code: remove the route's own check once the file is the only authority for it.</p>
+{% endcall %}
+
+{% call section("Request-level and record-level rules") %}
+<p>The permission check knows the <i>request</i> and the <i>caller's tier</i>, not the record. "Staff may list classrooms" is a level. "A member may change only their own profile" and "an admin may delete anyone but themselves" need the
+record, so they are written in the route, using <code>is_admin()</code> and the account's id. The two combine: the check lets the request through, then the route applies the rule about the record.</p>
+{% endcall %}
+
+{{ topic("Seeing what is allowed") }}
+{% call section("Determining what a person may do") %}
+<ul>
+    <li>The <b>Permissions</b> page lists every request by feature with its level, and colours it: green decided, yellow unreviewed, red locked.</li>
+    <li>The <b>Roles</b> page shows how many requests each tier may make right now.</li>
+    <li>In code, <code>permissions.may_make(method, route, user)</code> answers for one request and one person. The home page's "Your tools" and the user table's Edit menu are built with it, so they only offer what the viewer may open.</li>
+    <li><code class="cmd">python -m permissions</code> prints the counts and the unreviewed list; <code class="cmd">python -m permissions --check</code> compares the file with the app's routes.</li>
+</ul>
+{% endcall %}
+
+{% call section("Behaviour when the database is unavailable") %}
+<p>It answers <b>503</b> "Permissions cannot be read right now" instead of guessing from the file, because a saved change might have made a request stricter and falling back to the file could allow it.
+Open requests whose level was never changed still cannot be told apart from changed ones without reading, so they answer 503 too until the database is back. Login is pinned and so cannot be changed, but it
+needs the database anyway.</p>
+{% endcall %}
+
+{% call section("Adding a request to the file") %}
+<p>Put <code>"METHOD /route"</code> (the route as Flask writes it, with <code>&lt;int:id&gt;</code> and the like) under the right level, and run <code class="cmd">python -m permissions --check</code>. The format is in {{ ref('permissions-file') }}
+and a full walkthrough is in {{ ref('extend') }}.</p>
+{% endcall %}
+
+{{ files('permissions.py', 'permissions.json', 'api/permissions_admin.py', 'model/permission_override.py') }}
+{% endblock %}

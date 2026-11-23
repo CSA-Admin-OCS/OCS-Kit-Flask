@@ -1,0 +1,90 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+Every request goes through the same steps in the same order: <b>match the route</b>, <b>feature gate</b> (is its feature on?), <b>permission check</b> (is this caller allowed?), then
+<b>your code</b>, and finally the <b>CORS headers</b> on the way out. The reason for any returned status is found by identifying which step produced it.
+{% endcall %}
+
+{{ topic("The steps") }}
+{% call section("Order of processing") %}
+{% call code() %}browser   GET /api/export/users      Cookie: jwt_python_flask=...      Origin: https://pages.example.org
+   |
+nginx (production only)  ->  a gunicorn worker  ->  Flask
+   |
+ 1. match the URL to a route                     (no route: 404 page, or 405 for a wrong method)
+ 2. before_request: the feature gate             feature off ........................ 404 page
+ 3. before_request: the permission check         unlisted ............................ 403 "not in permissions.json"
+                                                 stored settings unreadable ......... 503
+                                                 public / unreviewed ................ pass, nobody is identified
+                                                 API path, no valid login ........... 401 JSON
+                                                 API path, tier too low ............. 403 JSON
+                                                 admin page, no session ............. redirect to /login
+                                                 admin page, tier too low ........... 403 page
+ 4. your route                                   decorators (@token_required), checks about one record, the work
+ 5. after_request: CORS                          adds Access-Control-* when the Origin header is allowed
+   |
+browser   the answer (the CORS headers are added to refusals too, so the browser can read a 401 or 403){% endcall %}
+<p>Steps 2 and 3 are two <code>before_request</code> hooks. Flask runs them in the order they were registered: the feature gate is registered when the blueprints are, and the permission check
+is registered at the end of <code class="file">main.py</code>, so the gate always runs first. A request that is refused in either step never reaches your code.</p>
+{% endcall %}
+
+{% call section("Feature gate and permission check") %}
+<p>So a feature that is off answers <b>404 to everyone</b>, including people who would be refused anyway. Otherwise an anonymous caller would get 401 for a route that, as far as the system is
+concerned, does not exist, and learn that it does. The gate asks which blueprint the request belongs to and whether any feature that owns that blueprint is on (a few blueprints are shared, like the
+Gemini routes used by both ai-chatbot and ai-grading). Routes that belong to no feature, the core ones, are never gated.</p>
+{% endcall %}
+
+{{ topic("The permission check, step by step") }}
+{% call section("The permission check") %}
+<ol>
+    <li><b>Is there anything to guard?</b> A browser's <code>OPTIONS</code> preflight, a request that matched no route, and static files are let through.</li>
+    <li><b>Find the level.</b> It builds the request line (<code>GET</code> for <code>HEAD</code>) and reads the level an admin saved for it, else the one in <code class="file">permissions.json</code>
+        (a pinned request ignores any saved change). A request in neither is refused with <b>403</b> and a message naming the entry to add. If the saved levels cannot be read it answers <b>503</b>.</li>
+    <li><b>Open levels pass.</b> <i>public</i> and <i>unreviewed</i> go straight to your route, and nobody is identified.</li>
+    <li><b>Identify the caller.</b> For an API path: the session cookie, else the token cookie, else an <code>Authorization</code> header. For an admin page: the session only. Nobody found: <b>401</b> JSON for the API, a redirect to <code>/login?next=...</code> for a page.</li>
+    <li><b>Compare tiers.</b> The caller's rank (from the role's tier) must reach the level, else <b>403</b>: JSON for the API, an error page for a page.</li>
+</ol>
+<p>Which paths count as API paths is data, not code: the <code>api_paths</code> list in <code class="file">permissions.json</code>. See {{ ref('permissions') }} for the model and {{ ref('roles') }} for how a role becomes a rank.</p>
+{% endcall %}
+
+{% call section("Routes and @token_required") %}
+<p>It still needs it when it uses <code>g.current_user</code>. The check identifies the caller only for requests that need a login; an open request (public or unreviewed) is not identified, so
+a route behind one that reads <code>g.current_user</code> must ask for it itself. The decorator also stays as a <b>second layer</b>: if it asks for more than the file does, the stricter one wins,
+which is why the Permissions page can always make a request stricter but can only make one more open when its code has no check of its own. Checks about <i>one record</i> (you may change only your own
+profile) can only be made in the route, where the record is known.</p>
+{% endcall %}
+
+{{ topic("Your code and the way out") }}
+{% call section("What a route receives") %}
+<ul>
+    <li><code>g.current_user</code>: the account, when the request was identified (by the check or by the decorator). The same lookup serves both, in <code>identify()</code> in <code class="file">api/authorize.py</code>.</li>
+    <li><code>request.url_rule</code>: the route template, such as <code>/api/classrooms/&lt;int:id&gt;</code>.</li>
+    <li>The models in <code class="file">model/</code>, over SQLAlchemy, with the database session of this worker.</li>
+</ul>
+<p>Routes answer JSON. Errors raised as Flask <code>HTTPException</code>s become JSON when they come from an API resource, and a plain <code>404</code> anywhere becomes the HTML "Something Went Wrong" page, because the 404
+handler in <code class="file">main.py</code> renders a template for every 404, API or not. Clients should read the status code, not the body, for a 404.</p>
+{% endcall %}
+
+{% call section("Preflight (OPTIONS) requests") %}
+<p>Flask answers <code>OPTIONS</code> itself for every route. The feature gate still applies (a disabled feature's preflight is a 404), the permission check lets it through because a preflight carries no cookies, and
+the CORS step adds the allowed methods and the headers the browser asked about, if its origin is allowed. See {{ ref('cors') }}.</p>
+{% endcall %}
+
+{{ topic("What is read from the database") }}
+{% call section("Database reads per request") %}
+<table>
+    <tr><th>Read</th><th>When</th><th>Cached</th></tr>
+    <tr><td>The stored kit and feature overrides</td><td>the first time the request asks which features are on</td><td>for this request</td></tr>
+    <tr><td>The saved level of this request (one row)</td><td>in the permission check, for every request with a matching route</td><td>no (one row by key)</td></tr>
+    <tr><td>The saved roles (a handful of rows)</td><td>the first time a tier or a label is needed</td><td>for this request</td></tr>
+    <tr><td>The account</td><td>when the caller is identified: the session's user id, or the token's uid</td><td>for this request</td></tr>
+    <tr><td>The saved CORS list (one row)</td><td>only when the request carries an <code>Origin</code> header</td><td>no</td></tr>
+</table>
+<p>A request for an open page by an anonymous visitor with no Origin header therefore costs almost nothing; a signed-in API call costs a handful of small queries. If any of the saved-settings reads fails, the system
+fails <b>closed</b>: permissions answer 503, roles count as L4 except admin, no CORS origin is allowed, and only the always-on features run, until the database answers again.</p>
+{% endcall %}
+
+{{ files('main.py', 'features.py', 'permissions.py', 'api/authorize.py', 'cors.py') }}
+{% endblock %}

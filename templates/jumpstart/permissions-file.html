@@ -1,0 +1,73 @@
+{% extends "jumpstart/layout.html" %}
+{% from "jumpstart/macros.html" import short, section, topic, code, files, ref with context %}
+
+{% block content %}
+{% call short() %}
+<code class="file">permissions.json</code> is one list per level, plus <code>api_paths</code> and <code>pinned</code>. Every entry is a request written <code>"METHOD /route"</code>, and every request the app serves is in <b>exactly one</b> level list.
+A bad file stops the app at startup, naming the entry. This chapter is the format; {{ ref('permissions') }} is how it is used.
+{% endcall %}
+
+{{ topic("The shape") }}
+{% call section("File structure") %}
+{% call code() %}{
+  "public":     ["GET /login", "POST /login", "POST /api/authenticate", "GET /jumpstart/"],
+  "member":     ["GET /api/id", "PUT /api/user"],
+  "staff":      ["POST /api/classrooms/"],
+  "admin":      ["GET /api/export/users", "DELETE /api/user"],
+  "unreviewed": ["GET /api/study"],
+  "api_paths":  ["/api/", "/run/"],
+  "pinned":     ["POST /login", "GET /permissions/"]
+}{% endcall %}
+<p>The real file lists {{ facts.requests_total }} requests, {{ facts.by_level.public }} public, {{ facts.by_level.member }} member, {{ facts.by_level.staff }} staff, {{ facts.by_level.admin }} admin and {{ facts.by_level.unreviewed }} unreviewed, with
+{{ facts.pinned|length }} pinned. A list that is missing counts as empty. Any other top-level key is an error.</p>
+{% endcall %}
+
+{% call section("Writing a request") %}
+<p><code>"METHOD /route"</code>: one of <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code> or <code>DELETE</code>, one space, then the route <b>exactly as Flask writes it</b>, converters and all
+(<code>/api/classrooms/&lt;int:id&gt;</code>, <code>/api/microblog/page/&lt;string:page_key&gt;</code>). Things to know:</p>
+<ul>
+    <li>A <b>trailing slash is part of the route</b>: <code>/api/classrooms/</code> and <code>/api/classrooms</code> are different entries, and an app route may exist in only one form.</li>
+    <li>A route that answers several methods needs <b>one entry per method</b>, and each may have a different level (<code>GET /api/user</code> is member, <code>DELETE /api/user</code> is admin).</li>
+    <li><code>HEAD</code> is answered like <code>GET</code>; <code>OPTIONS</code> is never listed.</li>
+    <li>Some routes have aliases (<code>/api/organization</code> and its old address <code>/api/school</code>): each is its own entry.</li>
+    <li>To get the text right, copy it from the Permissions page, or from the message of the 403 an unlisted route answers.</li>
+</ul>
+{% endcall %}
+
+{{ topic("The lists") }}
+{% call section("The lists") %}
+<table>
+    <tr><th>Key</th><th>Meaning</th></tr>
+    <tr><td><code>public</code></td><td>anyone, signed in or not, on purpose</td></tr>
+    <tr><td><code>member</code>, <code>staff</code>, <code>admin</code></td><td>the lowest level that may make the request (rank 1, 2, 3). These names are the built-in role ids from <code class="file">roles.py</code>, not the stored names or labels, so they never change with the kit.</td></tr>
+    <tr><td><code>unreviewed</code></td><td>open to anyone, undecided (behaves as public)</td></tr>
+    <tr><td><code>api_paths</code></td><td>path prefixes that are APIs: no login answers 401 JSON on these (currently {% for p in facts.api_paths %}<code>{{ p }}</code>{% if not loop.last %}, {% endif %}{% endfor %}), and a redirect to the login page everywhere else</td></tr>
+    <tr><td><code>pinned</code></td><td>requests the Permissions page cannot change. Each must also be in a level list.</td></tr>
+</table>
+{% endcall %}
+
+{% call section("Pinned requests") %}
+<p>The ones where a wrong change could lock people out of fixing it: the sign-in routes, and the pages and APIs for Permissions, CORS and Roles. Pinned means the <i>Permissions page</i> cannot change the level; editing the file always can. Right now:</p>
+<p>{% for line in facts.pinned %}<code>{{ line }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% endcall %}
+
+{{ topic("When it is wrong") }}
+{% call section("Errors") %}
+<table>
+    <tr><th>Written in the file</th><th>The app says (at startup)</th></tr>
+    <tr><td>a list that is not a list</td><td><code>"admin" must be a list of "METHOD /route" entries</code></td></tr>
+    <tr><td>an entry like <code>"/api/x"</code> or <code>"FETCH /api/x"</code></td><td><code>'/api/x' in "admin" is not written "METHOD /route"</code></td></tr>
+    <tr><td>the same request in two lists, or twice</td><td><code>GET /api/x is in "admin" and in "member"; it can be in only one</code></td></tr>
+    <tr><td>a key that is not a level</td><td><code>"owner" is not a level; the lists are public, member, staff, admin, unreviewed</code></td></tr>
+    <tr><td><code>api_paths</code> that are not path prefixes</td><td><code>"api_paths" must be a list of path prefixes such as "/api/"</code></td></tr>
+    <tr><td>a pinned entry in no level list</td><td><code>'GET /api/x' in "pinned" is not in any level list</code></td></tr>
+</table>
+<p>Each message starts with <code>permissions.json:</code>. And against the app, <code class="cmd">python -m permissions --check</code> reports <i>"X is a route but is in no list"</i> and <i>"X is in the file but the app has no such route"</i>. Both are tests too.</p>
+{% endcall %}
+
+{% call section("Format conventions") %}
+<p>So a change is a one-line difference in review, and two people adding different routes do not conflict. The tools that rewrite the file keep that format: entries sorted by route, then method, one per line.</p>
+{% endcall %}
+
+{{ files('permissions.json', 'permissions.py', 'tests/test_permissions.py') }}
+{% endblock %}

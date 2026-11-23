@@ -1,0 +1,42 @@
+{% extends "layouts/base.html" %}
+{% set project = "OCS JumpStart" %}
+
+{% block style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jumpstart.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="container-xl py-4 js-wrap">
+    <div class="row g-4">
+        <nav class="col-lg-3 js-side" aria-label="OCS JumpStart chapters">
+            <a class="js-brand" href="{{ url_for('jumpstart.index') }}">OCS JumpStart</a>
+            {% for group in groups %}
+            <p class="js-group">{{ group }}</p>
+            <ul class="list-unstyled">
+                {% for c in chapters if c.group == group %}
+                <li><a href="{{ url_for('jumpstart.chapter', chapter=c.slug) }}"{% if current and current.slug == c.slug %} class="active" aria-current="page"{% endif %}>
+                    <span class="js-num">{{ c.number }}</span> {{ c.title }}</a></li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+        </nav>
+
+        <main class="col-lg-9 js-main">
+            <p class="js-crumbs"><a href="{{ url_for('jumpstart.index') }}">OCS JumpStart</a> / {{ current.group }}</p>
+            <h1><span class="js-num js-num-big">{{ current.number }}</span> {{ current.title }}</h1>
+            <p class="js-lead">{{ current.summary }}</p>
+
+            {% block content %}{% endblock %}
+
+            <div class="js-pager">
+                {% if previous %}<a class="btn btn-outline-secondary" href="{{ url_for('jumpstart.chapter', chapter=previous.slug) }}">&larr; {{ previous.title }}</a>{% else %}<span></span>{% endif %}
+                {% if following %}<a class="btn btn-outline-primary" href="{{ url_for('jumpstart.chapter', chapter=following.slug) }}">{{ following.title }} &rarr;</a>{% endif %}
+            </div>
+        </main>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block background %}
+{% endblock %}
